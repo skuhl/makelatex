@@ -1,0 +1,7 @@
+v0.?? 
+ * Updated warning/error messages
+ * Extend non-ASCII check to .bib and .sty files
+ * Moved temporary files from "tmp" to "makelatex-tmp". Without this change, anybody with important files in a subdirectory named "tmp" may lose their files.
+
+v0.90 - 26 Apr 2012
+ * Initial release

@@ -23,7 +23,7 @@ import string, subprocess, os, sys, shutil, argparse, re, time, atexit
 import threading, traceback
 
 # used by both latex and pdflatex
-LATEX_ARGS="-file-line-error -interaction=nonstopmode -output-directory=tmp"
+LATEX_ARGS="-file-line-error -interaction=nonstopmode -output-directory=makelatex-tmp"
 DVIPS_ARGS="-t letter -Ppdf -G0"
 PDFNUP_ARGS="--paper letterpaper --frame true --scale .85 --keepinfo --quiet"
 
@@ -39,7 +39,7 @@ PS2PDF_ARGS_GREY=PS2PDF_ARGS + " -sColorConversionStrategy=Gray -dProcessColorMo
 
 lockfile = ".makelatex.lock"
 outfmt = '%20s: %s'
-tmpUconvertDir = "tmp/uconvert"
+tmpUconvertDir = "makelatex-tmp/uconvert"
 
 # used to determine if we need to print a message about optimization when
 # we exit from --loop or -l mode:
@@ -89,7 +89,7 @@ parser.add_argument('--noconvert',  action="store_true",
 parser.add_argument('-l', '--loop', action="store_true",
                     help='Make repeatedly')
 parser.add_argument('-k', '--keep', action="store_true",
-                    help='Keep tmp folder containing logs and converted images')
+                    help='Keep makelatex-tmp folder containing logs and converted images')
 parser.add_argument('-c', '--clean', action="store_true",
                     help='Just cleanup, don\'t build tex files')
 parser.add_argument('-e', '--engine',
@@ -279,7 +279,7 @@ def initialSetup():
     if not args.clean:
         # Make a temporary directory to store stuff
         try:
-            os.mkdir("tmp")
+            os.mkdir("makelatex-tmp")
         except OSError: # directory already exists
             pass
 
@@ -293,12 +293,12 @@ def initialSetup():
     # Set uconvert environment variables:
     os.environ['UCONVERT_DEST_DIR']=tmpUconvertDir
     os.environ['UCONVERT_SRC_DIR']=os.environ["TEXINPUTS"]
-    # We don't want to know about tmp/uconvert when determining
+    # We don't want to know about makelatex-tmp/uconvert when determining
     # dependencies---we want to depend on the original files.
     os.environ['TEXINPUTS_NOTMP']=os.environ["TEXINPUTS"]
-    # LaTeX needs to know about tmp/uconvert:
-    if not os.environ['TEXINPUTS'].startswith("tmp/uconvert:"):
-        os.environ['TEXINPUTS']="tmp/uconvert:" + os.environ['TEXINPUTS']
+    # LaTeX needs to know about makelatex-tmp/uconvert:
+    if not os.environ['TEXINPUTS'].startswith("makelatex-tmp/uconvert:"):
+        os.environ['TEXINPUTS']="makelatex-tmp/uconvert:" + os.environ['TEXINPUTS']
 
     # set grep to highlight matches in yellow:
     os.environ['GREP_OPTIONS']="--color=auto"
@@ -361,27 +361,27 @@ def isUpdateNeeded(basename):
 # command has an OK return value and if the command created the appropriate
 # file (dvi for latex, pdf for pdflatex/etc.).  The resulting file will be
 # put inside of the current directory (even though the arguments we pass to
-# latex will initially create the file inside of the tmp directory.
+# latex will initially create the file inside of the makelatex-tmp directory.
 def runLatex(basename, exe=None):
     if not exe:
         exe = args.engine
     print(outfmt % (basename, exe))
-    command = exe + " " + LATEX_ARGS + " " + basename + " > tmp/latex-" + basename + ".log"
+    command = exe + " " + LATEX_ARGS + " " + basename + " > makelatex-tmp/latex-" + basename + ".log"
     if subprocess.call(['/bin/sh', '-c', command]) == 0:
         dvi = basename + ".dvi"
         pdf = basename + ".pdf"
         synctex = basename + ".synctex.gz"
-        if exe == "latex" and  os.path.exists("tmp/" + dvi):
-            shutil.move("tmp/" + dvi, dvi)
-            if args.synctex and os.path.exists("tmp/" + synctex):
-                shutil.move("tmp/" + synctex, synctex)
+        if exe == "latex" and  os.path.exists("makelatex-tmp/" + dvi):
+            shutil.move("makelatex-tmp/" + dvi, dvi)
+            if args.synctex and os.path.exists("makelatex-tmp/" + synctex):
+                shutil.move("makelatex-tmp/" + synctex, synctex)
             else:
                 removeIfExist(synctex)
             return True # success
-        elif exe != "latex" and os.path.exists("tmp/" + pdf):
-            shutil.move("tmp/" + pdf, pdf)
-            if args.synctex and os.path.exists("tmp/" + synctex):
-                shutil.move("tmp/" + synctex, synctex)
+        elif exe != "latex" and os.path.exists("makelatex-tmp/" + pdf):
+            shutil.move("makelatex-tmp/" + pdf, pdf)
+            if args.synctex and os.path.exists("makelatex-tmp/" + synctex):
+                shutil.move("makelatex-tmp/" + synctex, synctex)
             else:
                 removeIfExist(synctex)
             return True # success
@@ -435,7 +435,7 @@ def runDvips(basename):
         return
 
     print(outfmt % (basename, "dvips"))
-    if runCommand("dvips", "-f " + DVIPS_ARGS + " -o " + ps + " < " + dvi + " 2> tmp/dvips-" + basename + ".log", shell=True) != 0 or not os.path.exists(ps):
+    if runCommand("dvips", "-f " + DVIPS_ARGS + " -o " + ps + " < " + dvi + " 2> makelatex-tmp/dvips-" + basename + ".log", shell=True) != 0 or not os.path.exists(ps):
         printDvipsError(basename)
         printError("ERROR: dvips failed")
         return False
@@ -477,7 +477,7 @@ def copyMetadata(src, dest):
 
     tmp = dest + ".tmp.pdf"
 
-    # Copy metadata from src file into dest file (but store the resulting file in tmp)
+    # Copy metadata from src file into dest file (but store the resulting file in makelatex-tmp)
     runCommand("pdftk", src + " dump_data | pdftk " + dest + " update_info - output " + tmp, shell=True)
 
     if os.path.exists(tmp):
@@ -490,18 +490,18 @@ def copyMetadata(src, dest):
 
 # Removes log files and related files that latex and friends make.
 def cleanupTexLogs(basename):
-    # Everything gets put into the tmp directory except for the following which sometimes get created:
+    # Everything gets put into the makelatex-tmp directory except for the
+    # following which sometimes get created:
     removeIfExist("missfont.log")
     removeIfExist("texput.log")
     return
 
 
-
 # Removes PDF, tmp directory, and all of the files that latex makes
 def cleanupEverything(texfiles):
-    # remove the tmp directory
-    if os.path.exists("tmp"):
-        shutil.rmtree("tmp")
+    # remove the makelatex-tmp directory
+    if os.path.exists("makelatex-tmp"):
+        shutil.rmtree("makelatex-tmp")
 
     for texfile in texfiles:
         basename = stripTexEnding(texfile)
@@ -519,8 +519,8 @@ def getPdfStatsFilename(filename):
         return None
 
     # Collect information in log files to use
-    pdfinfo = "tmp/pdfinfo-" + filename + ".log"
-    pdffonts = "tmp/pdffonts-" + filename + ".log"
+    pdfinfo = "makelatex-tmp/pdfinfo-" + filename + ".log"
+    pdffonts = "makelatex-tmp/pdffonts-" + filename + ".log"
     runCommand("pdfinfo",  "\"" + filename + "\" > \"" + pdfinfo  + "\" 2>/dev/null", shell=True)
     runCommand("pdffonts", "\"" + filename + "\" > \"" + pdffonts + "\" 2>/dev/null", shell=True)
 
@@ -715,7 +715,7 @@ def optimizePdf(basename):
 # Example: http://tug.org/pipermail/pdftex/2004-June/005042.html
 def optimizePs2pdf(basename):
     orig = basename + ".pdf"
-    opt = "tmp/" + basename + ".opt.pdf"
+    opt = "makelatex-tmp/" + basename + ".opt.pdf"
 
     # No need to do this if we are using latex because we will use ps2pdf
     # anyway to make pdf.
@@ -739,7 +739,7 @@ def optimizePs2pdf(basename):
 # Linearizes a PDF using pdfopt command. Silently fails.
 def optimizePdfopt(basename):
     orig = basename + ".pdf"
-    opt = "tmp/" + basename + ".opt.pdf"
+    opt = "makelatex-tmp/" + basename + ".opt.pdf"
 
     # If pdfopt is missing or if PDF is already linear, do nothing.
     if not findFileInPaths("pdfopt") or getPdfStatsFilename(basename + ".pdf")['linear']:
@@ -756,11 +756,11 @@ def optimizePdfopt(basename):
 # Runs makeindex if necessary. Returns True/False depending on if we had to
 # run makeindex, exits on error.
 def runMakeindex(basename):
-    string = open("tmp/latex-" + basename + ".log").read()
+    string = open("makelatex-tmp/latex-" + basename + ".log").read()
     if re.search("Writing index file.*idx", string):
         print(outfmt % (basename, "makeindex"))
-        if runCommand("makeindex", [ "-q", "-t", "tmp/makeindex-" + basename + ".log", "tmp/" + basename + ".idx" ], shell=False, silentFail=False) != 0:
-            print(open("tmp/makeindex-" + basename + ".log").read())
+        if runCommand("makeindex", [ "-q", "-t", "makelatex-tmp/makeindex-" + basename + ".log", "makelatex-tmp/" + basename + ".idx" ], shell=False, silentFail=False) != 0:
+            print(open("makelatex-tmp/makeindex-" + basename + ".log").read())
             cleanupTexLogs(basename)
             exit(1)
         return True
@@ -771,12 +771,12 @@ def runMakeindex(basename):
 # Runs bibtex if necessary. Returns True/False depending on if we had to
 # run bibtex, exits on error.
 def runBibtex(basename):
-    string = open("tmp/latex-" + basename + ".log").read()
+    string = open("makelatex-tmp/latex-" + basename + ".log").read()
     if re.search("Citation.*undefined", string):
         print(outfmt % (basename, "bibtex"))
-        command = "bibtex tmp/" + basename + "> tmp/bibtex-" + basename + ".log"
-        if runCommand("bibtex", "tmp/" + basename + "> tmp/bibtex-" + basename + ".log", shell=True) != 0:
-            print(open("tmp/bibtex-" + basename + ".log").read())
+        command = "bibtex makelatex-tmp/" + basename + "> makelatex-tmp/bibtex-" + basename + ".log"
+        if runCommand("bibtex", "makelatex-tmp/" + basename + "> makelatex-tmp/bibtex-" + basename + ".log", shell=True) != 0:
+            print(open("makelatex-tmp/bibtex-" + basename + ".log").read())
             cleanupTexLogs(basename)
             exit(1)
         return True
@@ -788,7 +788,7 @@ def runBibtex(basename):
 def printLatexWarn(basename):
     errMsg = [ "-H 'Missing character'" ]
     for i in errMsg:
-        runCommand("grep", i + " tmp/" + basename + ".log", shell=True)
+        runCommand("grep", i + " makelatex-tmp/" + basename + ".log", shell=True)
 
     errMsg = [ "-H 'Overfull'",
                "-H 'Underfull'",
@@ -804,7 +804,7 @@ def printLatexWarn(basename):
                "-H -A 2 \"./" + basename + ".bbl:\"",
                "-H 'This exam'" ] # for exam.cls
     for i in errMsg:
-        runCommand("grep", i + " tmp/latex-" + basename + ".log", shell=True)
+        runCommand("grep", i + " makelatex-tmp/latex-" + basename + ".log", shell=True)
 
 
 
@@ -813,11 +813,11 @@ def printLatexWarn(basename):
 def printDvipsError(basename):
     errMsg = [ "-A 1 -B 1 -e '\(Mismatched mode\)\|\(may be too complex to print\)'" ]
     for i in errMsg:
-        runCommand("grep", i + " tmp/dvips-" + basename + ".log", shell=True)
+        runCommand("grep", i + " makelatex-tmp/dvips-" + basename + ".log", shell=True)
 
 
 def needsRerun(basename, printMessages=False):
-    string = open("tmp/latex-" + basename + ".log").read()
+    string = open("makelatex-tmp/latex-" + basename + ".log").read()
     msg = [ 'LaTeX Warning: Label\(s\) may have changed',
             "Citation.*undefined.*",
             "No file " + basename + ".toc",
@@ -1168,7 +1168,7 @@ def processTexFile(texfile):
     if not runOK:
         printLatexWarn(basename)
         printError("ERROR: Latex indicated an error (but PDF may have been created).")
-        printWarn("Suggestion: If you don't see errors above, run makelatex with -k option and look in log files stored in the \"tmp\" subdirectory.")
+        printWarn("Suggestion: If you don't see errors above, run makelatex with -k option and look in log files stored in the \"makelatex-tmp\" subdirectory.")
 
         # Sleep for 5 seconds if we are looping so that we don't just
         # repeatedly recompile the file over and over again.
@@ -1380,9 +1380,9 @@ def processTexFiles():
 # Remove lockfile. Automatically called when exit() is called.
 def cleanupLock():
     removeIfExist(lockfile)
-    # Remove tmp now unless user requested that we keep it
-    if not args.keep and os.path.exists("tmp"):
-        shutil.rmtree("tmp")
+    # Remove makelatex-tmp now unless user requested that we keep it
+    if not args.keep and os.path.exists("makelatex-tmp"):
+        shutil.rmtree("makelatex-tmp")
     global requestedOptimize
     if args.loop and requestedOptimize:
         printWarn("Rerun without --loop or -l to optimize PDF.")
