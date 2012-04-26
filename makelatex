@@ -1,0 +1,1431 @@
+#!/usr/bin/env python
+#
+# makelatex - version: 0.90
+# http://www.cs.mtu.edu/~kuhl/software/makelatex
+#
+#
+# Copyright (C) 2011--2012 Scott A. Kuhl
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import string, subprocess, os, sys, shutil, argparse, re, time, atexit
+import threading, traceback
+
+# used by both latex and pdflatex
+LATEX_ARGS="-file-line-error -interaction=nonstopmode -output-directory=tmp"
+DVIPS_ARGS="-t letter -Ppdf -G0"
+PDFNUP_ARGS="--paper letterpaper --frame true --scale .85 --keepinfo --quiet"
+
+# PS2PDF argument listing:
+# http://pages.cs.wisc.edu/~ghost/doc/cvs/Ps2pdf.htm
+# http://ghostscript.com/doc/current/Ps2pdf.htm
+# -dPDFA = creates PDF/A documents
+# Try to embed all fonts. Use lossless image compression. Don't downsample images.
+PS2PDF_ARGS="-dPDFSETTINGS=/prepress -dAutoRotatePages=/None -dEmbedAllFonts=true -dMaxSubsetPct=100 -dSubsetFonts=true -dAutoFilterColorImages=false -dAutoFilterGrayImages=false -dColorImageFilter=/FlateEncode -dGrayImageFilter=/FlateEncode -dMonoImageFilter=/FlateEncode -dDownsampleColorImages=false -dDownsampleGrayImages=false -dDownsampleMonoImages=false"
+PS2PDF_ARGS_SCREEN="-dPDFSETTINGS=/screen -dAutoRotatePages=/None -dEmbedAllFonts=true -dMaxSubsetPct=100 -dSubsetFonts=true -dColorImageResolution=150 -dGrayImageResolution=150 -dMonoImageResolution=300"
+PS2PDF_ARGS_GREY=PS2PDF_ARGS + " -sColorConversionStrategy=Gray -dProcessColorModel=/DeviceGray"
+
+
+lockfile = ".makelatex.lock"
+outfmt = '%20s: %s'
+tmpUconvertDir = "tmp/uconvert"
+
+# used to determine if we need to print a message about optimization when
+# we exit from --loop or -l mode:
+requestedOptimize = False
+
+class bcolors:
+    FAIL = '\033[91m\033[1m'  # red, bold
+    WARN = '\033[93m\033[1m'  # yellow, bold
+    ENDC = '\033[0m'
+
+    def disable(self):
+        self.HEADER = ''
+        self.OKBLUE = ''
+        self.OKGREEN = ''
+        self.WARNING = ''
+        self.FAIL = ''
+        self.ENDC = ''
+
+def printError(msg):
+    print(bcolors.FAIL + msg + bcolors.ENDC)
+def printWarn(msg):
+    print(bcolors.WARN + msg + bcolors.ENDC)
+
+
+
+## --------------------------------------
+## Parse arguments:
+## --------------------------------------
+
+parser = argparse.ArgumentParser(description='Build PDF files from LaTeX files.')
+
+parser.add_argument('texfiles', metavar='X.tex', type=str, nargs='*',
+                    help='One or more tex files, if none provided, we will guess.')
+parser.add_argument('-f', '--force', action="store_true",
+                    help='Recreate pdf even if one already exists')
+parser.add_argument('-o', '--optimize',  action="store_true",
+                    help='Try to PDFs smaller with ps2pdf and linearize PDF with pdfopt')
+
+# TODO: Threading is disabled by default since there we sometimes have one
+# thread hang on a subprocess.call() which causes us to hang. Once
+# threading works reliably, we should change this to --nothreads.
+parser.add_argument('-t', '--threads',  action="store_true",
+                    help='Compile each document in its own thread.')
+
+parser.add_argument('--noconvert',  action="store_true",
+                    help='Don\'t automatically convert images')
+parser.add_argument('-l', '--loop', action="store_true",
+                    help='Make repeatedly')
+parser.add_argument('-k', '--keep', action="store_true",
+                    help='Keep tmp folder containing logs and converted images')
+parser.add_argument('-c', '--clean', action="store_true",
+                    help='Just cleanup, don\'t build tex files')
+parser.add_argument('-e', '--engine',
+                    help="latex (uses dvips and ps2pdf), pdflatex, xelatex, or lualatex")
+# Default to synctex ON
+#parser.add_argument('-s', '--synctex', action="store_false",
+#                    help="Use synctex (your editor must support it)")
+# Default to synctex OFF
+parser.add_argument('-s', '--synctex', action="store_true",
+                    help="Use synctex (your editor must support it)")
+# Overview of synctex: http://www.tug.org/TUGboat/tb29-3/tb93laurens.pdf
+# Can be enabled in documents with \synctex=1
+# evince 2.32 supports synctex through Ctrl+LeftClick
+# gedit supports it through a plugin
+# Emacs supports it with some help: http://www.emacswiki.org/emacs/AUCTeX
+# pdflatex and xelatex supports it since TexLive 2008
+
+parser.add_argument('--nupLand', metavar="NxN",
+                    help="2x1 (2 pages per 1 landscape page, side by side); 1x2 (above/below); etc")
+parser.add_argument('--nupPort', metavar="NxN",
+                    help="2x1 (2 pages per 1 portrait page, side by side); 1x2 (above/below); etc")
+parser.add_argument('--nupHandout', action="store_true",
+                    help="3 pages per page with room for notes (useful for presentations)")
+parser.add_argument('--greyscale', '--grayscale', action="store_true",
+                    help="Convert output pdf to greyscale.")
+parser.add_argument('--screen', action="store_true",
+                    help="Compress images in PDF more heavily (reduce image resolution, use lossy image compression)")
+# TODO: We should automatically trigger --nonascii if it looks as if the
+# user really did want to use UTF8 (or some other encoding) in their files.
+parser.add_argument('--nonascii', action="store_true",
+                    help="Don't warn about non-ASCII characters in tex files.")
+
+
+args = parser.parse_args()
+
+
+
+
+## --------------------------------------
+## Functions:
+## --------------------------------------
+
+# Get list of tex files for us to process.  All files will
+# have .tex ending---even if the user provided arguments
+# that ended in .pdf
+def getTexFiles():
+    # if there are no arguments, find matching tex files
+    if not args.texfiles:
+        texs = filesMatchingRegex('^[^%]*\\\\begin{document}')
+    else:
+        texs = []
+        for i in args.texfiles:
+            if i.endswith(".tex"): # we want .tex endings
+                texs.append(i)
+            # if we got .pdf ending and .tex file exists with same name, change argument:
+            elif i.endswith(".pdf") and os.path.exists(i[:-4]+".tex"):
+                texs.append(i[:-4]+".tex")
+            # if nothing above worked, try adding .tex to the end
+            elif os.path.exists(i + ".tex"):
+                texs.append(i+".tex")
+            # If none of the above, just trust the user...
+            else:
+                texs.append(i)
+
+    texs = dedup(texs)
+    # texs contains the files that we want to try to use.  We will put our final
+    # list back into args.texfiles
+
+    # There are dependencies if A.tex used \includepdf{B} and we are going
+    # to create B.pdf.  In this case, we want to process B before A:
+
+    # Loop is needed to sort out multiple levels of dependencies
+    for numLoops in range(5):
+        # Go through list of tex files in order.  Find their dependencies
+        # and make sure that we appear after them in the texfile list.
+        newList = []
+        for t in texs:
+            deps = findPotentialDependencies(t)
+            for d in deps:
+                if d.endswith(".pdf"):
+                    # Dependency list will say ./A.pdf, the match in the
+                    # tex list would be A.tex if we are expected to create
+                    # A.pdf.
+                    dpdf = d  # save d with .pdf ending
+                    d = d.rsplit(".", 1)[0] # Remove .pdf
+                    d = d.split("/", 1)[1]  # Remove the "./"
+                    d = d + ".tex"          # add .tex
+
+                    # If we are depending on a PDF that we are expected to
+                    # create, put it in newList ahead of us.
+                    if texs.count(d) > 0:
+                        # Don't use threading if there was a dependency
+                        if args.threads == True:
+                            args.threads = False
+                            print("NOTE: Disabling threading since " + t + " depends on " + dpdf)
+                        if newList.count(d) == 0:
+                            newList.append(d)
+            # Add this tex file to the list
+            if not newList.count(t):
+                newList.append(t)
+
+        # if list is unchanged through loop, we
+        # successfully figured out the dependencies
+        if newList == texs:
+            args.texfiles = texs
+            return texs
+        else:
+            tmp = newList
+            newList = texs
+            texs = tmp
+
+    # If we got here, we couldn't sort out the
+    # dependencies...oh well...
+    args.texfiles = texs
+    return texs
+
+
+# Given a directory, returns the list of files in the directory that match the
+# provided regular expression.  Not recursive.
+def filesMatchingRegex(regex, dir=os.getcwd()):
+    ret = []
+
+    for f in os.listdir(dir):
+
+        # skip non-tex files
+        if not f.endswith(".tex"):
+            continue
+
+        # Try opening file
+        try:
+            for line in open(f):
+                if line and re.match(regex, line):
+                    if ret.count(f) == 0:
+                        ret.append(f)
+
+        except IOError: # occurs if file isn't readable or for directories
+            pass
+
+    ret.sort()
+    return ret
+
+
+
+# Get ready to run, put tex files to compile in args.texfiles variable
+def initialSetup():
+    # Choose method to generate pdf if no choice is made by user
+    if not args.engine:
+        if findFileInPaths("xelatex", os.environ['PATH']):
+            args.engine = "xelatex"
+        elif findFileInPaths("pdflatex", os.environ['PATH']):
+            args.engine = "pdflatex"
+        else:
+            args.engine = "latex"
+    # Note: We don't detect and use lualatex by default because there
+    # hasn't been a stable release yet.
+
+    # Allowed engines and their actual values:
+    engines = { "xelatex"  : "xelatex",
+                "pdflatex" : "pdflatex",
+                "latex"    : "latex",
+                "xetex"    : "xelatex",
+                "dvips"    : "latex",
+                "lualatex" : "lualatex",
+                "luatex"   : "lualatex" }
+    try:
+        args.engine = engines[args.engine]
+    except KeyError:
+        printError("ERROR: Unknown engine selected: " + args.engine)
+        exit(1)
+
+    if args.synctex:
+        global LATEX_ARGS
+        LATEX_ARGS = LATEX_ARGS + " -synctex=1"
+        # NOTE: I don't think plain "latex" supports synctex, but it doesn't
+        # hurt to try to use it if the user requested it.
+
+    # Optimizing the PDFs takes some time.
+    # If user is running in loop mode, they probably
+    # want immediate feedback---not small file sizes
+    if args.loop and args.optimize:
+        print("NOTE: Optimization is disabled in loop mode.")
+        args.optimize=False
+        # use the following to print message when we exit out of loop:
+        global requestedOptimize
+        requestedOptimize=True
+
+    if not args.clean:
+        # Make a temporary directory to store stuff
+        try:
+            os.mkdir("tmp")
+        except OSError: # directory already exists
+            pass
+
+    # We depend on some environment variables containins a list of paths.
+    # If these variables are not set, set them to the current directory.
+    envs = [ "TEXINPUTS", "BIBINPUTS" ]
+    for e in envs:
+        if not e in os.environ:
+            os.environ[e] = "."
+
+    # Set uconvert environment variables:
+    os.environ['UCONVERT_DEST_DIR']=tmpUconvertDir
+    os.environ['UCONVERT_SRC_DIR']=os.environ["TEXINPUTS"]
+    # We don't want to know about tmp/uconvert when determining
+    # dependencies---we want to depend on the original files.
+    os.environ['TEXINPUTS_NOTMP']=os.environ["TEXINPUTS"]
+    # LaTeX needs to know about tmp/uconvert:
+    if not os.environ['TEXINPUTS'].startswith("tmp/uconvert:"):
+        os.environ['TEXINPUTS']="tmp/uconvert:" + os.environ['TEXINPUTS']
+
+    # set grep to highlight matches in yellow:
+    os.environ['GREP_OPTIONS']="--color=auto"
+    os.environ['GREP_COLOR']="01;33" # deprecated option, yellow
+    # overrides GREP_COLOR in new versions of grep:  yellow, bold the entire line:
+    os.environ['GREP_COLORS']="mc=01;33:ms=01;33:mc=01;33:sl=01"
+
+    if os.path.exists(lockfile):
+        print("Is this script running elsewhere? If not,")
+        print("delete " + lockfile + " and try again.")
+        exit(1)
+
+    return args
+
+
+
+# Strip the .tex ending if it exists in string
+def stripTexEnding(string):
+    if string.endswith(".tex"):
+        return string[:-4]
+    return string
+
+# Returns true if an update is forced or if the PDF file is older than one
+# (or more) files that it depends on.
+def isUpdateNeeded(basename):
+    pdf = basename + ".pdf"
+    tex = basename + ".tex"
+
+    if args.force or not os.path.exists(pdf):
+        return True
+
+    # Find potential dependencies
+    deps = findPotentialDependencies(tex)
+    # include our tex file in list of dependencies
+    deps.append(tex)
+    # Check if anything has been modified since we made the pdf
+    pdfmtime = os.stat(pdf).st_mtime
+
+    ret = False
+#    print "mtime of " + pdf + " is " + str("%.10f" % pdfmtime)
+    for d in deps:
+        # All of the dependencies should exist by the time we get here.
+        # But, a user removing a file shouldn't cause us to try to
+        # recompile the PDF and overwrite a good one that already exists.
+        if not os.path.exists(d):
+            continue
+        # Except for the case above, all items in the
+        # dependency list should actually exist because
+        # we don't include things in the list that do not
+        # exist.
+        if os.stat(d).st_mtime > pdfmtime:
+#            print "mtime of dep " + d + " is " + str("%.10f" % os.stat(d).st_mtime)
+            print(outfmt % (basename, compressuser(d) + " changed; rebuilding..."))
+            ret = True
+
+    return ret
+
+
+# Runs latex/pdflatex/xelatex/etc, returns true if successful if the
+# command has an OK return value and if the command created the appropriate
+# file (dvi for latex, pdf for pdflatex/etc.).  The resulting file will be
+# put inside of the current directory (even though the arguments we pass to
+# latex will initially create the file inside of the tmp directory.
+def runLatex(basename, exe=None):
+    if not exe:
+        exe = args.engine
+    print(outfmt % (basename, exe))
+    command = exe + " " + LATEX_ARGS + " " + basename + " > tmp/latex-" + basename + ".log"
+    if subprocess.call(['/bin/sh', '-c', command]) == 0:
+        dvi = basename + ".dvi"
+        pdf = basename + ".pdf"
+        synctex = basename + ".synctex.gz"
+        if exe == "latex" and  os.path.exists("tmp/" + dvi):
+            shutil.move("tmp/" + dvi, dvi)
+            if args.synctex and os.path.exists("tmp/" + synctex):
+                shutil.move("tmp/" + synctex, synctex)
+            else:
+                removeIfExist(synctex)
+            return True # success
+        elif exe != "latex" and os.path.exists("tmp/" + pdf):
+            shutil.move("tmp/" + pdf, pdf)
+            if args.synctex and os.path.exists("tmp/" + synctex):
+                shutil.move("tmp/" + synctex, synctex)
+            else:
+                removeIfExist(synctex)
+            return True # success
+
+    return False # failure
+
+
+# If shell=True, args is a string containing the remaining arguments.  If
+# shell=False, args is an array of individual arguments in strings.
+# Returns the return code. If silentFail=True, returns None if the exe is
+# not found. If silentFail=False, exit and print stack trace if executable
+# is not found.
+def runCommand(exe, args, path=os.environ['PATH'], shell=False, silentFail=False):
+    fullpath = findFileInPaths(exe, path)
+    if fullpath == None:
+        if silentFail:
+            return None
+        else:
+            traceback.print_exc()
+            printError("File \"" + exe + "\" not found in " + path)
+            exit(1)
+    # rudimentary security for running as shell=True
+    if shell and args.count(";"):
+        traceback.print_exc()
+        printError("Arguments cannot contain a semicolon.")
+        exit(1)
+
+    if shell:
+#        print "Running: " + exe + " " + args
+        return subprocess.call(exe + " " + args, shell=True)
+    else:
+        exe = [ exe ]
+        exe.extend(args)
+#        print "Running: "
+#        print exe
+        return subprocess.call(exe)
+
+
+# Runs latex, dvips, ps2pdf
+# NOTE: Some systems have a dvipdf script which converts from dvi to pdf,
+# but this is usually just a wrapper around dvips and gs
+def runDvips(basename):
+    if args.engine != "latex":
+        return True
+
+    dvi = basename+".dvi"
+    ps = basename+".ps"
+
+    if not os.path.exists(dvi):
+        print("Can't run dvips because .dvi file doesn't exist.")
+        return
+
+    print(outfmt % (basename, "dvips"))
+    if runCommand("dvips", "-f " + DVIPS_ARGS + " -o " + ps + " < " + dvi + " 2> tmp/dvips-" + basename + ".log", shell=True) != 0 or not os.path.exists(ps):
+        printDvipsError(basename)
+        printError("ERROR: dvips failed")
+        return False
+
+    removeIfExist(dvi)
+    printDvipsError(basename)
+
+    print(outfmt % (basename, "ps2pdf"))
+    if not ps2pdf(PS2PDF_ARGS, ps, basename + ".pdf", optimize=False):
+        printError("ERROR: Could not create PDF (is ps2pdf in PATH?).")
+        return False
+    removeIfExist(ps)
+    return True
+
+
+# Removes a file if it exists:
+def removeIfExist(filename):
+    if os.path.exists(filename):
+        os.remove(filename)
+
+# Copies metadata from src to destination. src PDF is unchanged and dest
+# will always exist (even if we couldn't update the metadata).
+def copyMetadata(src, dest):
+    if not os.path.exists(src) or not os.path.exists(dest):
+        return False
+
+    if src == dest:
+        return True
+
+    if not findFileInPaths("pdftk"):
+        return False
+
+    # ps2pdf does not copy metadata from the src pdf and adds some of its
+    # own fields. If we wanted metadata to match exactly, we could clear
+    # all metadata in dest and then copy it from src. However, if we remove
+    # all metadata (by setting InfoValue: to blank in every entry), pdftk
+    # will remove the Info dictionary entirely and refuse to add meta data
+    # back in with a subsequent update_info.
+
+    tmp = dest + ".tmp.pdf"
+
+    # Copy metadata from src file into dest file (but store the resulting file in tmp)
+    runCommand("pdftk", src + " dump_data | pdftk " + dest + " update_info - output " + tmp, shell=True)
+
+    if os.path.exists(tmp):
+        shutil.move(tmp,dest)
+        return True
+    else:
+        return False
+
+
+
+# Removes log files and related files that latex and friends make.
+def cleanupTexLogs(basename):
+    # Everything gets put into the tmp directory except for the following which sometimes get created:
+    removeIfExist("missfont.log")
+    removeIfExist("texput.log")
+    return
+
+
+
+# Removes PDF, tmp directory, and all of the files that latex makes
+def cleanupEverything(texfiles):
+    # remove the tmp directory
+    if os.path.exists("tmp"):
+        shutil.rmtree("tmp")
+
+    for texfile in texfiles:
+        basename = stripTexEnding(texfile)
+        cleanupTexLogs(basename)
+        # remove the PDF file and any stray dvi/ps files
+        # that might still be around.
+        # NOTE: We also remove some common nup pdfs
+        extlist = ".pdf .dvi .ps .grey.pdf .screen.pdf .handout.pdf .2x1.pdf .1x2.pdf 3x1.pdf 1x3.pdf 2x2.pdf 3x2.pdf 2x3.pdf .synctex.gz"
+        for e in extlist.split():
+            removeIfExist(basename+e)
+
+# Returns a dictionary structure containing information about the given PDF.
+def getPdfStatsFilename(filename):
+    if not os.path.exists(filename):
+        return None
+
+    # Collect information in log files to use
+    pdfinfo = "tmp/pdfinfo-" + filename + ".log"
+    pdffonts = "tmp/pdffonts-" + filename + ".log"
+    runCommand("pdfinfo",  "\"" + filename + "\" > \"" + pdfinfo  + "\" 2>/dev/null", shell=True)
+    runCommand("pdffonts", "\"" + filename + "\" > \"" + pdffonts + "\" 2>/dev/null", shell=True)
+
+
+    # Print # of pages and paper size
+    numPages = '?'
+    pageSize = '?'
+    fileSize = os.stat(filename).st_size
+    unembeddedFonts = -1
+    type3Fonts = -1
+    totalFonts = -1
+    linear = False
+
+    if findMatches([ "Optimized:(.*)yes" ], pdfinfo):
+        linear = True
+
+    for line in open(pdfinfo):
+        if line.startswith("Pages:"):
+            numPages = int(str(line[16:]).strip())
+        if line.startswith("Page size:"):
+            pageSize = str(line[16:]).strip().replace(" x ", "x").replace(" pts", "pts")
+
+
+    # Check for fonts that are not embedded or are bitmapped.
+    lines = 0
+    for line in open(pdffonts):
+        lines += 1
+    totalFonts = lines - 2
+    embedded = 0
+    for line in open(pdffonts):
+#        if line[55:58] == "yes": #sometimes font names are really long, find field from the end of the line instead:
+        if line[-22:-19] == "yes":
+            embedded += 1
+    type3Fonts = 0
+    # Type 3 fonts are usually bitmapped when using LaTeX. However, Type 3
+    # doesn't necessarily mean that that the font is bitmapped:
+    # http://tex.stackexchange.com/questions/18712/why-call-type-3-font-bitmap
+    for line in open(pdffonts):
+        if line[37:43] == "Type 3":
+            type3Fonts += 1
+
+    unembeddedFonts = totalFonts - embedded
+
+    return { "basename": filename[0:-4],
+             "filename": filename,
+             "numPages": numPages,
+             "pageSize": pageSize,
+             "fileSize": fileSize,
+             "unembeddedFonts": unembeddedFonts,
+             "type3Fonts": type3Fonts,
+             "totalFonts": totalFonts,
+             "linear": linear}
+
+def printPdfStats(stats):
+    if not stats:
+        return
+
+    if stats['numPages'] == 1:
+        string = "%3d %s" % (stats['numPages'], "page;  ")
+    else:
+        string = "%3d %s" % (stats['numPages'], "pages; ")
+
+    string = string + ("%7s; " % humanSize(stats['fileSize']))
+    string = string + stats['pageSize'] + "; "
+    if stats['linear']:
+        string = string + "linearized"
+    else:
+        string = string + "non-linear"
+
+    print(outfmt % (stats['basename'], string))
+
+    string1 = ""
+    uf = stats['unembeddedFonts']
+    if uf == 1: string1 = "1 unembedded font"
+    if uf > 1:  string1 = str(uf) + " unembedded fonts"
+
+    string2 = ""
+    bf = stats['type3Fonts']
+    if bf == 1: string2 = "1 bitmapped font"
+    if bf > 1:  string2 = str(uf) + " bitmapped fonts"
+
+    if len(string1) > 0 and len(string2) > 0:
+        printWarn(outfmt % (stats['basename'], string1 + "; " + string2))
+    elif len(string1) > 0 or len(string2) > 0:
+        printWarn(outfmt % (stats['basename'], string1 + string2))
+
+# Given a basename, print out statistics for any PDFs that we might have
+# created.
+def printPdfStatsBasename(basename):
+    extlist = ".pdf .grey.pdf .screen.pdf .handout.pdf .2x1.pdf .1x2.pdf 3x1.pdf 1x3.pdf 2x2.pdf 3x2.pdf 2x3.pdf"
+    for e in extlist.split():
+        stats = getPdfStatsFilename(basename+e)
+        printPdfStats(stats)
+
+
+
+def humanSize(num):
+    for x in ['bytes','KiB','MiB','GiB','TiB']:
+        if num < 1024.0:
+            return "%d%s" % (round(num), x)
+        num /= 1024.0
+
+
+# calls ps2pdf, manages mtime properly, copies metadata from original file
+# to new one. Returns true if outFile is created. Prints warning if
+# metadata is not copied. If optimize=True, we will try to optimize the PDF
+# after we have run the given ps2pdf command.
+def ps2pdf(args, infile, outfile, optimize=True):
+    if not os.path.exists(infile):
+        return False
+
+    mtime = os.stat(infile).st_mtime
+    command = PS2PDF_ARGS.split()
+    command.append(infile)
+    command.append(outfile)
+    if runCommand("ps2pdf", command, shell=False, silentFail=True) == None:
+        # If ps2pdf doesn't appear to be installed, return false:
+        return False
+
+    if os.path.exists(outfile):
+        if not copyMetadata(infile, outfile):
+            printWarn(outfmt % (outfile[0:-4], "Might have incorrect metadata."))
+        if optimize:
+            optimizePdf(outfile[:-4])
+        os.utime(outfile, (mtime,mtime))
+        return True
+    return False
+
+
+# If PDF has unembedded fonts, run it through ps2pdf (which should embed
+# the fonts). Returns true if new PDF is created. New PDF is saved on top of the
+# original.
+def embedFonts(basename):
+    infile = basename + ".pdf"
+    outfile = basename + ".embed.pdf"
+
+    stats = getPdfStatsFilename(infile)
+    if not stats or stats['unembeddedFonts'] == 0:
+        return False
+
+    print(outfmt % (basename, "ps2pdf (try to embed fonts)"))
+    # This process happens before optimization, so the file will get
+    # subsequently optimized even with optimize=False
+    if ps2pdf(PS2PDF_ARGS, infile, outfile, optimize=False):
+        shutil.move(outfile, infile)
+        return True
+    return False
+
+# Make a greyscale PDF if the user requested it. Returns true if file is
+# successfully created.
+def greyscalePdf(basename):
+    if not args.greyscale:
+        return True
+
+    infile = basename + ".pdf"
+    outfile = basename + ".grey.pdf"
+    print(outfmt % (basename, "ps2pdf (convert to greyscale)"))
+    return ps2pdf(PS2PDF_ARGS_GREY, infile, outfile, optimize=True)
+
+#  Make a screen-quality PDF if the user requested it. Returns true if file
+#  is successfully created.
+def screenPdf(basename):
+    if not args.screen:
+        return
+
+    infile = basename + ".pdf"
+    outfile = basename + ".screen.pdf"
+    print(outfmt % (basename, "ps2pdf (for screen-quality)"))
+    return ps2pdf(PS2PDF_ARGS_SCREEN, infile, outfile, optimize=True)
+
+
+# TODO: pdfsizeopt.py has all sorts of useful/interesting information about
+# generating smaller PDFs.  We currently don't use any of it mostly because
+# it seems to have many dependencies that aren't commonly installed on
+# machines.
+def optimizePdf(basename):
+    pdf = basename+".pdf"
+
+    if not args.optimize or not os.path.exists(pdf):
+        return
+    # make sure we don't change mtime
+    mtime = os.stat(pdf).st_mtime
+    optimizePs2pdf(basename)
+    optimizePdfopt(basename)
+    os.utime(pdf, (mtime,mtime))
+
+
+
+# NOTE: ps2pdf often makes the PDF file size much smaller than what
+# pdflatex produces. Despite its name, ps2pdf also can take a pdf file as
+# input.
+# Example: http://tug.org/pipermail/pdftex/2004-June/005042.html
+def optimizePs2pdf(basename):
+    orig = basename + ".pdf"
+    opt = "tmp/" + basename + ".opt.pdf"
+
+    # No need to do this if we are using latex because we will use ps2pdf
+    # anyway to make pdf.
+    if args.engine == "latex":
+        return
+
+    print(outfmt % (basename, "ps2pdf (try to decrease file size)"))
+    if ps2pdf(PS2PDF_ARGS, orig, opt, optimize=False):
+        origSize = os.path.getsize(orig)
+        optSize  = os.path.getsize(opt)
+
+        # Only use optimized version if it is at least 2% smaller
+        if float(optSize)/origSize > 0.98:
+            removeIfExist(opt)
+        else:
+            print(outfmt % (basename, "ps2pdf made file "+ "%0.1f%%" % (100-100.0*optSize/origSize) + " smaller"))
+            shutil.move(opt,orig)
+
+
+
+# Linearizes a PDF using pdfopt command. Silently fails.
+def optimizePdfopt(basename):
+    orig = basename + ".pdf"
+    opt = "tmp/" + basename + ".opt.pdf"
+
+    # If pdfopt is missing or if PDF is already linear, do nothing.
+    if not findFileInPaths("pdfopt") or getPdfStatsFilename(basename + ".pdf")['linear']:
+        return
+
+    # Linearize the PDF with pdfopt:
+    print(outfmt % (basename, "pdfopt linearized the PDF"))
+    runCommand("pdfopt", [ orig, opt ], shell=False, silentFail=True)
+    if os.path.exists(opt):
+        shutil.move(opt, orig)
+
+
+
+# Runs makeindex if necessary. Returns True/False depending on if we had to
+# run makeindex, exits on error.
+def runMakeindex(basename):
+    string = open("tmp/latex-" + basename + ".log").read()
+    if re.search("Writing index file.*idx", string):
+        print(outfmt % (basename, "makeindex"))
+        if runCommand("makeindex", [ "-q", "-t", "tmp/makeindex-" + basename + ".log", "tmp/" + basename + ".idx" ], shell=False, silentFail=False) != 0:
+            print(open("tmp/makeindex-" + basename + ".log").read())
+            cleanupTexLogs(basename)
+            exit(1)
+        return True
+    return False
+
+
+
+# Runs bibtex if necessary. Returns True/False depending on if we had to
+# run bibtex, exits on error.
+def runBibtex(basename):
+    string = open("tmp/latex-" + basename + ".log").read()
+    if re.search("Citation.*undefined", string):
+        print(outfmt % (basename, "bibtex"))
+        command = "bibtex tmp/" + basename + "> tmp/bibtex-" + basename + ".log"
+        if runCommand("bibtex", "tmp/" + basename + "> tmp/bibtex-" + basename + ".log", shell=True) != 0:
+            print(open("tmp/bibtex-" + basename + ".log").read())
+            cleanupTexLogs(basename)
+            exit(1)
+        return True
+    return False
+
+# TODO: De-grep-ify the following functions.
+
+# Print latex warnings
+def printLatexWarn(basename):
+    # arguments to grep
+    errMsg = [ "-H 'Overfull'",
+               "-H 'Underfull'",
+               "-H -A 1 -B 1 -e '\(LaTeX Warning\)\|\(pdfTeX warning\)\|\(Undefined control sequence\)\|\(Missing $ inserted\)'",
+               "-H -A 2 -e '\(LaTeX Font Warning\)'",
+               "-H 'This exam'" ] # for exam.cls
+
+    for i in errMsg:
+        runCommand("grep", i + " tmp/latex-" + basename + ".log", shell=True)
+
+def printLatexErrors(basename):
+    # arguments to grep
+    errMsg = [ "-A 1 \"Undefined control sequence\"",
+               "'Missing .* inserted'",
+               "\"LaTeX Error\"",
+               "\"! I can't\"",
+               "\"!pdfTeX error\"", #pdflatex
+               "\"Fatal error occurred\"", #pdflatex
+               "-A 1 \"Runaway argument\"",
+               "-A 2 \"./" + basename + ".tex:\"",
+               "-A 2 \"./" + basename + ".bbl:\"" ]
+
+    for i in errMsg:
+        runCommand("grep", i + " tmp/latex-" + basename + ".log", shell=True)
+
+
+def printDvipsError(basename):
+    errMsg = [ "-A 1 -B 1 -e '\(Mismatched mode\)\|\(may be too complex to print\)'" ]
+    for i in errMsg:
+        runCommand("grep", i + " tmp/dvips-" + basename + ".log", shell=True)
+
+
+def needsRerun(basename, printMessages=False):
+    string = open("tmp/latex-" + basename + ".log").read()
+    msg = [ 'LaTeX Warning: Label\(s\) may have changed',
+            "Citation.*undefined.*",
+            "No file " + basename + ".toc",
+            "LaTeX Warning: There were undefined references",
+            "Package natbib Warning: There were undefined citations.",
+            "Package natbib Warning: Citation\(s\) may have changed." ]
+
+    # if printMessages, print all messages:
+    if printMessages:
+        for m in msg:
+            if re.search(m, string):
+                printWarn(outfmt % (basename, re.search(m,string).group(0)))
+
+    # search again, if we find a message, return True.
+    for m in msg:
+        if re.search(m, string):
+            return True
+    return False
+
+
+# Removes duplicates in list
+def dedup(listin):
+    out = []
+    for i in listin:
+        if out.count(i) == 0:
+            out.append(i)
+    return out
+
+
+# Finds matches, removes duplicates, returns matching strings
+# Example: findMatches(["foo(.*)bar", "bar(.*)foo" ], filename)
+def findMatches(regexs, filename):
+    matches = []
+    try:
+        for r in regexs:
+            f = open(filename)
+            for line in f:
+                matches.extend(re.findall(r, line))
+            f.close()
+    except IOError:
+        print("Error opening or reading file: " + filename)
+        exit(1)
+    return dedup(matches)
+
+
+# Returns a list of images in the texfiles.  The strings returned
+# are exactly how they appear in the texfile.  (i.e., they may
+# be missing extensions)
+def getImagesInTexFiles(texfiles):
+    ret = []
+    for i in texfiles:
+        ret.extend(findMatches([ "^[^%]*\\\\includegraphics\[.*\]{(.*)}", "^[^%]*\\\\includegraphics{(.*)}" ], i))
+    return dedup(ret)
+
+# Returns a list of images in a single texfile
+def getImagesInTex(texfile):
+    return getImagesInTexFiles([texfile])
+
+# Returns a list of .sty files, .bib files, included .tex files, and
+# included .pdf files in the latex document.  The files returned by this
+# function are either absolute paths or relative paths beginning with "./"
+def getIncludedInTex(texfile):
+    incList = []
+
+    matches = findMatches(["^[^%]*\\\\bibliography{(.*)}" ], texfile)
+    for match in matches:
+        exten = [ ".bib" ]
+        for e in exten:
+            for s in match.split(","):  # multiple files can be comma delimited
+                name = findFileInPaths(s + e, os.environ['BIBINPUTS'])
+                if name and incList.count(name) == 0:
+                    incList.append(name)
+
+    texinputs = os.environ['TEXINPUTS_NOTMP']
+
+    matches = findMatches(["^[^%]*\\\\usepackage\[.*\]{(.*)}", "^[^%]*\\\\usepackage{(.*)}"], texfile)
+    for match in matches:
+        exten = [ ".sty" ]
+        for e in exten:
+            for s in match.split(","):  # multiple packages can be comma delimited
+                name = findFileInPaths(s + e, texinputs)
+                if name and incList.count(name) == 0:
+                    incList.append(name)
+
+
+    # NOTE: \input will basically copy/paste the contents of the other file
+    # into the current file.  \include will render the included information
+    # seperately (i.e., force a page break after the included content).
+    matches = findMatches(["^[^%]*\\\\input{(.*)}", "^[^%]*\\include{(.*)}"], texfile)
+    for match in matches:
+        exten = [ "", ".tex" ]      # TODO: Remove extensions first?
+        for e in exten:
+            name = findFileInPaths(match + e, texinputs)
+            if name and incList.count(name) == 0:
+                incList.append(name)
+
+    matches = findMatches([ "^[^%]*\\\\includepdf\[.*\]{(.*)}", "^[^%]*\\\\includepdf{(.*)}" ], texfile)
+    for s in matches:
+        # file extension is optional in \includepdf so we'll deal
+        # with both cases.
+        if not s.endswith(".pdf"):
+            s = s+".pdf"
+        # find the PDF
+        name = findFileInPaths(s, texinputs)
+        # if PDF file isn't found, look for a tex file that we could
+        # potentially use to create it
+        if not name:
+            name = findFileInPaths(s[:-4]+".tex", texinputs)
+        # Add a dependency on the PDF if we found a matching PDF or tex file.
+        if name:
+            base = name[:-4]  # remove .tex or .pdf extension
+            incList.append(base + ".pdf")
+
+    return incList
+
+
+# Given a colon-delimited set of paths and a filename, look for the file in
+# the paths and return path (or None if it doesn't exist in paths)
+def findFileInPaths(name, paths=os.environ['PATH']):
+    for path in paths.split(os.pathsep):
+        f = os.path.join(path, name)
+        if os.path.exists(f):
+            return f
+    return None
+
+
+# Returns a list of files used by a tex file.  This list is primarily used
+# only to determine if some of the files that we depend on have changed
+# since we created the last pdf.
+#
+# * It doesn't hurt (much) if we include files that aren't actually
+#   dependencies.
+#
+# * Paths to files will be aboslute or begin with ./
+#
+# * Some of the files returned by this function may not exist (example: If
+# * the user did an \includepdf{b} and b.pdf doesn't exist, but b.tex does
+# * (i.e., user is expecting us to make b.pdf for them).
+#
+# * All of the image files that we return will exist.  If we can't find the
+# * source image, we don't know what extension the user intended to use
+# * because anything they have inside of includegraphics could have any
+# * number of extensions added to it!
+#
+def findPotentialDependencies(texfile):
+    depend = []
+# This isn't ideal because we don't know the file extension that we are
+# looking for.  The convertImages() function will actually do the
+# conversion of these files to a latex-appropriate format.
+    exten = [ "", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".svgz", ".eps", ".ps", ".pdf", ".tif", ".tiff" ]
+    images = getImagesInTex(texfile)
+    for i in images:
+        for e in exten:
+            f = findFileInPaths(i + e, os.environ['TEXINPUTS_NOTMP'])
+            if f:
+                depend.append(f)
+
+    depend.extend(getIncludedInTex(texfile))
+
+    if os.path.exists("./prepost.sh"):
+        depend.append("./prepost.sh")
+
+    return dedup(depend)
+
+# Performs the opposite of path.os.expanduser(): Changes /home/username
+# into ~.
+def compressuser(path):
+    return re.sub(os.path.expanduser('~'), '~', path)
+
+# Put lossy file formats (like JPG) at the end of the list.
+def supportedImageExten(engine):
+# NOTE: If a .mp (metapost) image file is present, we will request a .ps or
+# .mps file from uconvert (depending on engine). Otherwise, we assume that
+# everybody should be using one of the formats below when including
+# imagery.
+    if engine == "latex":
+        return ".eps".split(" ")
+    if engine == "pdflatex":
+        return ".pdf .png .jpg".split(" ")
+    if engine == "lualatex":
+        return ".pdf .png .jpg".split(" ")
+    if engine == "xelatex":
+        return ".eps .pdf .png .jpg".split(" ")
+
+
+def convertImages(texfiles):
+    if args.noconvert:
+        return
+
+    # If force requested, remove any images that already exist
+    if args.force and os.path.exists(tmpUconvertDir):
+        shutil.rmtree(tmpUconvertDir)
+
+    # Generate the list of images (with extensions) that we need.  Since
+    # latex allows you to include images without specifying extensions and
+    # because different engines support different file formats, this gets
+    # a little complex:
+    imageWithExten = []
+    for image in getImagesInTexFiles(texfiles):
+        # image is the image name as it appears in the tex file!
+        imageLow = image.lower()
+
+        # If the user specified an extension and it is supported by the
+        # engine, then we definitively know which file we need to
+        # create. We will add the file to imageWithExten list and move on
+        # to the next image.
+        okExten = False
+        for i in supportedImageExten(args.engine):
+            if imageLow.endswith(i):
+                imageWithExten.append(image)
+                okExten = True
+                continue
+
+        if okExten:
+            continue
+
+        # If we get to here, the string doesn't have an extension, or it
+        # has one and it doesn't work with the engine.
+
+        # It looks like there is an 2 or 3 character extension, print
+        # warning and do what user requested.
+        if len(image) > 4 and (image[-3]=='.' or image[-4]=='.'):
+            printWarn("WARNING: \"" + image + "\" might not be supported by the \"" + args.engine + "\" engine .")
+            printWarn("Suggestion: Don't specify an extension and let this script handle conversions.")
+            # If they specified it, trust the user and forget uconvert:
+            imageWithExten.append(image)
+            continue
+
+        # Now, we are confident that there is no assume there isn't an extension:
+
+
+        # Look for an existing image file that is in the format that is supported by our engine.
+        choices = []
+        paths = os.environ['TEXINPUTS_NOTMP']
+        for i in supportedImageExten(args.engine):
+            choices.append(findFileInPaths(image+i, paths))
+        while None in choices:
+            choices.remove(None)
+
+        # If we can't find an appropriate file that already exists, we'll
+        # ask uconvert to make us a pdf (or eps) from all of the file
+        # formats it supports. Of course, it might fail!
+        if len(choices)==0:
+            # Differt engines prefer .mp files to be converted differently.
+            if findFileInPaths(image + ".mp", paths):
+                if args.engine == "latex" or args.engine == "xelatex":
+                    imageWithExten.append(image + ".ps")
+                else:
+                    imageWithExten.append(image + ".mps")
+
+            # Otherwise, if using latex engine, ask uconvert for a EPS:
+            elif args.engine == "latex":
+                imageWithExten.append(image + ".eps")
+            else:
+                # If using any other engine, ask uconvert for a PDF (TODO: Is this arbitrary choice is best?)
+                imageWithExten.append(image + ".pdf")
+        else:
+            # If we found an existing image in a supported format, use it.
+            exten = "." + choices[0][-len(choices[0].split('.')):]
+            imageWithExten.append(image + exten)
+
+    # Now, imageWithExten contains all of the images that we are going to
+    # use with the document.
+
+    try: # Create directory for converted images:
+        os.mkdir(tmpUconvertDir)
+    except OSError: # directory already exists
+        pass
+
+    if len(imageWithExten) == 0:
+        return
+
+    # Do the conversion:
+    if runCommand("uconvert", dedup(imageWithExten), shell=False) != 0:
+        printWarn("WARNING: Failed to convert one or more images.")
+
+
+def createNupHandout(basename):
+    if not args.nupHandout:
+        return
+    if not findFileInPaths("pdfjam-slides3up"):
+        printError("pdfjam-slides3up command is needed for --nupHandout")
+        return
+    outfile = basename+".handout.pdf"
+    commandargs = ["--outfile", outfile]
+    commandargs.extend(PDFNUP_ARGS.split())
+    commandargs.append(basename+".pdf")  # input file
+
+    print(outfmt % (basename, "pdfnup"))
+    runCommand("pdfjam-slides3up", commandargs, shell=False)
+
+    optimizePdf(outfile[:-4])
+
+def createNupPort(basename):
+    if not args.nupPort:
+        return
+    if not findFileInPaths("pdfnup"):
+        printError("pdfnup command is needed for --nupPort")
+    outfile = basename+"."+args.nupPort+".pdf"
+    commandargs = ["--outfile", outfile]
+    commandargs.extend(PDFNUP_ARGS.split())
+    commandargs.extend(["--no-landscape", "--nup", args.nupPort])
+    commandargs.append(basename+".pdf")  # input file
+
+    print(outfmt % (basename, "pdfnup"))
+    runCommand("pdfnup", commandargs, shell=False)
+
+    optimizePdf(outfile[:-4])
+
+def createNupLand(basename):
+    if not args.nupLand:
+        return
+    if not findFileInPaths("pdfnup"):
+        printError("pdfnup command is needed for --nupLand")
+    outfile = basename+"."+args.nupLand+".pdf"
+    commandargs = ["--outfile", outfile]
+    commandargs.extend(PDFNUP_ARGS.split())
+    commandargs.extend(["--landscape", "--nup", args.nupLand])
+    commandargs.append(basename+".pdf")  # input file
+
+    print(outfmt % (basename, "pdfnup"))
+    runCommand("pdfnup", commandargs, shell=False)
+
+    optimizePdf(outfile[:-4])
+
+
+def createNup(basename):
+    # Can't create nup if the source pdf doesn't exist.
+    if not os.path.exists(basename+".pdf"):
+        return
+    createNupHandout(basename)
+    createNupPort(basename)
+    createNupLand(basename)
+
+
+
+# Generate a PDF from the tex file.
+# Returns true if we sucessfully create pdf.
+def processTexFile(texfile):
+    if not os.path.exists(texfile):
+        printError("ERROR: Latex source file does not exist: " + texfile)
+        return
+
+    basename = stripTexEnding(texfile)
+    # runOK will be true even if there were undefined references, etc
+    runOK = runLatex(basename)
+
+    if not runOK:
+        printLatexErrors(basename)
+        printError("ERROR: Latex failed to run successfully.")
+        printWarn("Suggestion: If you don't see errors above, run makelatex with -k option and look in log files stored in the \"tmp\" subdirectory.")
+
+        # Sleep for 5 seconds if we are looping so that we don't just
+        # repeatedly recompile the file over and over again.
+        #
+        # TODO: We could do something better. For example, we could get the
+        # mtime of all the source files here, and then wait until the mtime
+        # on one of the files changed before attempting to recompile.
+        if args.loop:
+            time.sleep(5)
+        return False
+
+    # If we have to run bibtex or makeindex, we have to rerun latex at least one time
+    mustRunAgain = runBibtex(basename)
+    mustRunAgain = mustRunAgain + runMakeindex(basename)
+    if mustRunAgain:
+        runLatex(basename)
+
+    # Run latex in a loop up to 5 times if needed
+    count = 5
+    while count > 0:
+        if(needsRerun(basename)):
+            count = count-1
+            runOK = runLatex(basename)
+        else:
+            count = -100
+
+
+    printLatexWarn(basename)
+
+    if count == 0: # if there were undefined references, print them out
+        needsRerun(basename, printMessages=True)
+        return False
+
+    # If last run failed or if PDF is missing, we failed.
+    if not runOK:
+        printLatexErrors(basename)
+        printError(outfmt % (basename, "ERROR: Failed to create PDF"))
+    else:
+        runDvips(basename)     # Convert dvi to pdf if necessary
+        cleanupTexLogs(basename)
+        # The commands change the modified time of the PDF, set it back to
+        # the time we started to build the PDF:
+        updatePdfMtime(basename)
+
+    return runOK
+
+
+
+def updatePdfMtime(basename):
+    pdf = basename+".pdf"
+    if not os.path.exists(pdf):
+        return
+
+    global makelatex_start_time
+
+    # makes the PDF mtime and atime match the time we started this script
+    os.utime(pdf, (makelatex_start_time, makelatex_start_time))
+
+    # Evince doesn't seem to automatically reload the file unless we
+    # update the access time with the "touch" command.
+    runCommand("touch", [ "-a", basename+".pdf"], shell=False)
+# The above touch command should be the same as running the
+# following, but "touch" works and the following doesn't for some
+# reason...
+# os.utime(basename+".pdf", (time.time(), makelatex_start_time))
+
+
+# Calls the function multiple times---once with each argument.
+def callFunctionWithThreads(funcName, funcArgs):
+    if len(funcArgs) == 0:
+        return
+
+    for i in funcArgs:
+        if not args.threads:
+            funcName(i)
+        else:
+            threading.Thread(target=funcName,args=(i,)).start()
+
+    # wait for all threads to finish if we're using threading
+    if args.threads:
+        while threading.activeCount() > 1:
+            time.sleep(.2)
+
+
+# Given a list of files, print out lines which contain non-ASCII
+# characters.
+def findNonAsciiChars(files):
+    if args.nonascii:
+        return
+
+    havePrintedMessage = False
+    for f in files:
+        try:
+            lineNo = 0
+            for line in open(f):
+                lineNo = lineNo+1
+                if not all(ord(c) < 128 for c in line):
+                    if not havePrintedMessage:
+                        havePrintedMessage = True
+                        printWarn("Non-ASCII characters in file:")
+                    sys.stdout.write(bcolors.WARN + f + ":" + str(lineNo) + bcolors.ENDC + ": ")
+                    for c in line:
+                        if ord(c) < 128:
+                            sys.stdout.write(c)
+                        else:
+                            sys.stdout.write(bcolors.WARN + c + bcolors.ENDC)
+
+
+        except IOError:
+            pass
+
+# Generate PDF(s)s from one (or more) tex file(s).
+def processTexFiles():
+    if os.path.exists("./prepost.sh"):
+        subprocess.call(['./prepost.sh', "pre"])
+
+    # TODO: Fix me---we should do this natively in python and make it an
+    # optional.
+    texfilelist = getTexFiles()
+    if len(texfilelist) > 0:
+        findNonAsciiChars(texfilelist)
+
+    # Update the time we started in a global variable---used to set mtime
+    # of pdfs we create.
+    global makelatex_start_time
+    makelatex_start_time = time.time()
+
+    triedToBuild = [] # list of tex files we tried to build
+
+    # We need this outside loop to correctly rebuild files that have
+    # \includepdf.  For example if a.tex has \includepdf{b.pdf} and b
+    # changes, we will only rebuild B.pdf the first time through the loop.
+    # The second time through the loop, B.pdf will have changed and we will
+    # detect that A needs to be rebuilt too.
+    origForceFlag = args.force
+    for j in range(0,10):
+        # Print message if no texfiles
+        texfilelist = getTexFiles()
+        if len(texfilelist) == 0:
+            printError("ERROR: No files given as arguments, no tex files found.")
+            return
+
+        # Prune the texfile list to just the files that need updating AND
+        # the files that we haven't already tried to build in a previous
+        # time through the loop.  This is needed because if we failed to
+        # build a file, we would repeatedly try to build it inside of the
+        # above loop.  If force flag is set, isUpdateNeeded() will always
+        # return true.
+        needUpdate = []
+        for texfile in texfilelist:
+            if triedToBuild.count(texfile) == 0 and isUpdateNeeded(stripTexEnding(texfile)):
+                needUpdate.append(texfile)
+        texfilelist = needUpdate
+
+        # break out of loop when nothing to update
+        if len(texfilelist) == 0:
+            break
+
+        # If the same image is in multiple tex files, we only want to
+        # convert the image once.  Therefore, convert the images here
+        # instead of doing it in the loop below which uses seperate threads
+        # per document.  (NOTE: uconvert uses one thread per image if
+        # multiple images are being converted).
+        convertImages(texfilelist)
+
+        # Create pdfs from each tex file
+        for i in texfilelist:
+            triedToBuild.append(i)
+
+        callFunctionWithThreads(processTexFile, texfilelist)
+
+        # Ignore the --force flag after first time through loop.
+        if args.force:
+            args.force=False
+    # Restore force flag to whatever it was before
+    # the loop.
+    args.force = origForceFlag
+
+    # Optimize PDF and create nup versions regardless of if files need
+    # updating.
+    texfilelist = getTexFiles()
+    if len(texfilelist) > 0:
+        basenameList = []
+        for i in texfilelist:
+            basenameList.append(stripTexEnding(i))
+
+        callFunctionWithThreads(embedFonts, basenameList)
+        callFunctionWithThreads(optimizePdf, basenameList)
+        callFunctionWithThreads(greyscalePdf, basenameList)
+        callFunctionWithThreads(screenPdf, basenameList)
+        callFunctionWithThreads(createNup, basenameList)
+
+    # Print all of the stats together at the end so they don't get buried
+    # in all of the output.  Don't messages if we are looping due to "-l"
+    # option and we didn't need to build anything this time through the
+    # loop.
+    #
+    # NOTE: We could just print out stats of the files that we built, but
+    # it is usually nice to have a summary of all files that we were asked
+    # to build...not just the ones that we actually built.
+    for i in texfilelist:
+        if not args.loop or (args.loop and len(triedToBuild) > 0):
+            printPdfStatsBasename(stripTexEnding(i))
+
+    if os.path.exists("./prepost.sh"):
+        subprocess.call(['./prepost.sh', "post"])
+
+
+
+# Remove lockfile.  Automatically called
+# when exit() is called.
+def cleanupLock():
+    removeIfExist(lockfile)
+    # Remove tmp now unless user requested that we keep it
+    if not args.keep and os.path.exists("tmp"):
+        shutil.rmtree("tmp")
+    global requestedOptimize
+    if args.loop and requestedOptimize:
+        printWarn("Rerun without --loop or -l to optimize PDF.")
+        printWarn("  (Makelatex disables optimization when looping is used.)")
+
+
+
+## --------------------------------------
+## Main part of program:
+## --------------------------------------
+
+initialSetup()
+
+atexit.register(cleanupLock) # cleanup lockfile on exit()
+l = open(lockfile, "w") # create lockfile
+l.close()
+
+
+try: # catch ctrl+c
+    if args.clean:
+        # prepost.sh can make a tex file, so we need to
+        # make it to detect all the pdfs that we could
+        # remove:
+        if os.path.exists("./prepost.sh"):
+            subprocess.call(['./prepost.sh', "pre"])
+        cleanupEverything(getTexFiles())
+        if os.path.exists("./prepost.sh"):
+            subprocess.call(['./prepost.sh', "post"])
+        exit(0)
+
+    if args.loop:
+        while True:
+            processTexFiles()
+            time.sleep(1)
+
+    else:
+        processTexFiles()
+
+except KeyboardInterrupt:
+    print
+    print("makelatex: Cleaning up...")
+    exit(1)

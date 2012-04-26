@@ -1,0 +1,37 @@
+INSTALLATION INSTRUCTIONS:
+ * Place "uconvert" and "makelatex" into a directory that is in your PATH. Make them executable.
+
+ * Place uconvert.conf in any of the following locations:
+   $HOME/.uconvert.conf
+   $HOME/.config/uconvert/uconvert.conf
+   /etc/uconvert.conf
+
+
+REQUIREMENTS:
+ * Supported platforms:
+     * Ubuntu (well tested)
+     * Linux (should work without problems)
+     * Mac (unknown, no reason it shouldn't work)
+ * Python 2.7 or higher (or, 2.6+argparse library)
+ * latex+dvips or pdflatex or xelatex or lualatex
+ * ps2pdf (from Ghostscript)
+ * pdffonts, pdfinfo (from poppler-utils)
+ * bash shell (used by uconvert)
+ * grep, touch
+ * Recommended: pdftk
+ * Optional: pdfnup and pdfjam-slides3up (from pdfjam package)
+
+
+IMAGE CONVERSION:
+
+If any of the following programs are installed, uconvert automatically use them to convert images to file formats supported by LaTeX;
+ * convert (from ImageMagick)
+ * gm convert (from GraphicsMagick)
+ * inkscape (svg -> eps/ps/pdf/png)
+ * rsvg-convert (svg -> ps/pdf/png)
+ * dvips (dvi->ps)
+ * dvipdf (dvi->pdf)
+ * gunzip (used for ps.gz->pdf)
+ * pdftops (pdf->eps/ps, in poppler-utils package)
+ * fig2dev (conversion from .fig; in transfig package)
+ * mpost (conversion from .mp files; needs texlive-metapost package)
