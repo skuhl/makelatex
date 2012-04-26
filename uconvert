@@ -36,7 +36,7 @@ VERSION="0.90"
 
 import string, subprocess, os, sys, shutil, threading, time
 
-# Directories to look for configuration files (named ".uconvert" or "uconvert.conf"):
+# Directories to look for configuration files (named ".uconvert.conf" or "uconvert.conf"):
 CONFIG_DIRS = os.path.expanduser('~') + ":" + os.path.expanduser('~') + "/.config/uconvert:/etc:."
 THREADS=True   # start each argument in its own thread
 VERBOSE=1
@@ -90,7 +90,7 @@ def humanSize(num):
         num /= 1024.0
 
 
-# If a suitable conversion has been found in ~/.uconvert, runcommand()
+# If a suitable conversion has been found in uconvert.conf, runcommand()
 # runs the conversion command.  An appropriate source file should exist
 # before calling runcommand.
 #
@@ -178,11 +178,11 @@ def updateMtime(srcfile, destfile):
     os.utime(destfile, (fileinstat.st_mtime+.01, fileinstat.st_mtime+.01))
 
 
-# convertfile() is called once for every conversion rule in ~/.uconvert.
+# convertfile() is called once for every conversion rule in uconvert.conf
 #
-# inlist is a list of extensions in the IN: line in ~/.uconvert
-# outlist is a list of extension in the OUT: line in ~/.uconvert
-# command is a the string after COMMAND: in ~/.uconvert
+# inlist is a list of extensions in the IN: line in uconvert.conf
+# outlist is a list of extension in the OUT: line in uconvert.conf
+# command is a the string after COMMAND: in uconvert.conf
 # request is the requested file.
 def convertfile(inlist, outlist, command, request):
 
@@ -248,11 +248,11 @@ def findFileInPaths(name, paths=os.environ['PATH']):
 
 
 def processFile(arg):
-    confFilename = findFileInPaths(".uconvert", CONFIG_DIRS)
+    confFilename = findFileInPaths(".uconvert.conf", CONFIG_DIRS)
     if not confFilename:
         confFilename = findFileInPaths("uconvert.conf", CONFIG_DIRS)
     if not confFilename:
-        printError("uconvert ERROR: Can't find .uconvert or uconvert.conf in any of these directories:")
+        printError("uconvert ERROR: Can't find .uconvert.conf or uconvert.conf in any of these directories:")
         print(CONFIG_DIRS)
         exit(1)
 
