@@ -772,15 +772,24 @@ def runMakeindex(basename):
 # run bibtex, exits on error.
 def runBibtex(basename):
     string = open("makelatex-tmp/latex-" + basename + ".log").read()
-    if re.search("Citation.*undefined", string):
+    if not re.search("Citation.*undefined", string):
+        return False
+
+    # multibib support: We may have to run bibtex multiple times.
+    bibtexargs = [ basename ]
+    bibtexargs.extend(findMatches(["^[^%]*\\\\newcites{(.*)}{.*}"], basename+".tex"))
+    bibtexargs = dedup(bibtexargs)
+
+    for basename in bibtexargs:
         print(outfmt % (basename, "bibtex"))
         command = "bibtex makelatex-tmp/" + basename + "> makelatex-tmp/bibtex-" + basename + ".log"
         if runCommand("bibtex", "makelatex-tmp/" + basename + "> makelatex-tmp/bibtex-" + basename + ".log", shell=True) != 0:
             print(open("makelatex-tmp/bibtex-" + basename + ".log").read())
             cleanupTexLogs(basename)
             exit(1)
-        return True
-    return False
+
+    return True
+
 
 # TODO: De-grep-ify the following functions.
 
@@ -882,7 +891,15 @@ def getImagesInTex(texfile):
 def getIncludedInTex(texfile):
     incList = []
 
-    matches = findMatches(["^[^%]*\\\\bibliography{(.*)}" ], texfile)
+    matches = []
+    matches.extend(findMatches(["^[^%]*\\\\bibliography{(.*)}"], texfile))
+
+    # multibib support: find other bibtex files that are used
+    mbibNames = findMatches(["^[^%]*\\\\newcites{(.*)}{.*}"], texfile)
+    for i in mbibNames:
+        matches.extend(findMatches(["^[^%]*\\\\bibliography"+i+"{(.*)}"], texfile))
+    matches = dedup(matches)
+
     for match in matches:
         exten = [ ".bib" ]
         for e in exten:

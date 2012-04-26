@@ -1,0 +1,17 @@
+\documentclass{article}
+\usepackage{multibib}
+\newcites{ltex}{\TeX\ and \LaTeX\ References}
+\begin{document}
+
+A copy of multbib.sty is included in case it isn't installed on your system.
+
+This \LaTeX\ book citation will appear in the its own bibliography \citeltex{latexbook} and the Chicago Manual of Style will appear in its own bibliography \cite{chicago}.
+
+\bibliographystyleltex{alpha}
+\bibliographyltex{biblio}
+
+\renewcommand{\refname}{Other references}
+\bibliographystyle{plain}
+\bibliography{biblio}
+
+\end{document}
