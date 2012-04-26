@@ -784,32 +784,30 @@ def runBibtex(basename):
 
 # TODO: De-grep-ify the following functions.
 
-# Print latex warnings
+# Print latex warnings and errors
 def printLatexWarn(basename):
-    # arguments to grep
+    errMsg = [ "-H 'Missing character'" ]
+    for i in errMsg:
+        runCommand("grep", i + " tmp/" + basename + ".log", shell=True)
+
     errMsg = [ "-H 'Overfull'",
                "-H 'Underfull'",
-               "-H -A 1 -B 1 -e '\(LaTeX Warning\)\|\(pdfTeX warning\)\|\(Undefined control sequence\)\|\(Missing $ inserted\)'",
+               "-H -A 1 -B 1 -e '\(LaTeX Warning\)\|\(pdfTeX warning\)\|\(Undefined control sequence\)'",
                "-H -A 2 -e '\(LaTeX Font Warning\)'",
+               "-A 1 \"Undefined control sequence\"",
+               "-H \"LaTeX Error\"",
+               "-H \"! I can't\"",
+               "-H \"!pdfTeX error\"", #pdflatex
+               "-H \"Fatal error occurred\"", #pdflatex
+               "-H -A 1 \"Runaway argument\"",
+               "-H -A 4 \"./" + basename + ".tex:\"",
+               "-H -A 2 \"./" + basename + ".bbl:\"",
                "-H 'This exam'" ] # for exam.cls
-
     for i in errMsg:
         runCommand("grep", i + " tmp/latex-" + basename + ".log", shell=True)
 
-def printLatexErrors(basename):
-    # arguments to grep
-    errMsg = [ "-A 1 \"Undefined control sequence\"",
-               "'Missing .* inserted'",
-               "\"LaTeX Error\"",
-               "\"! I can't\"",
-               "\"!pdfTeX error\"", #pdflatex
-               "\"Fatal error occurred\"", #pdflatex
-               "-A 1 \"Runaway argument\"",
-               "-A 2 \"./" + basename + ".tex:\"",
-               "-A 2 \"./" + basename + ".bbl:\"" ]
 
-    for i in errMsg:
-        runCommand("grep", i + " tmp/latex-" + basename + ".log", shell=True)
+
 
 
 def printDvipsError(basename):
@@ -1168,8 +1166,8 @@ def processTexFile(texfile):
     runOK = runLatex(basename)
 
     if not runOK:
-        printLatexErrors(basename)
-        printError("ERROR: Latex failed to run successfully.")
+        printLatexWarn(basename)
+        printError("ERROR: Latex indicated an error (but PDF may have been created).")
         printWarn("Suggestion: If you don't see errors above, run makelatex with -k option and look in log files stored in the \"tmp\" subdirectory.")
 
         # Sleep for 5 seconds if we are looping so that we don't just
@@ -1206,7 +1204,6 @@ def processTexFile(texfile):
 
     # If last run failed or if PDF is missing, we failed.
     if not runOK:
-        printLatexErrors(basename)
         printError(outfmt % (basename, "ERROR: Failed to create PDF"))
     else:
         runDvips(basename)     # Convert dvi to pdf if necessary
@@ -1287,11 +1284,15 @@ def processTexFiles():
     if os.path.exists("./prepost.sh"):
         subprocess.call(['./prepost.sh', "pre"])
 
-    # TODO: Fix me---we should do this natively in python and make it an
-    # optional.
-    texfilelist = getTexFiles()
-    if len(texfilelist) > 0:
-        findNonAsciiChars(texfilelist)
+    asciiToCheck = []
+    for f in getTexFiles():
+        asciiToCheck.append(f)
+        deps = findPotentialDependencies(f)
+        for d in deps:
+            if d.endswith(".sty") or d.endswith(".bib"):
+                asciiToCheck.append(d)
+    findNonAsciiChars(dedup(asciiToCheck))
+
 
     # Update the time we started in a global variable---used to set mtime
     # of pdfs we create.
@@ -1364,13 +1365,9 @@ def processTexFiles():
         callFunctionWithThreads(createNup, basenameList)
 
     # Print all of the stats together at the end so they don't get buried
-    # in all of the output.  Don't messages if we are looping due to "-l"
-    # option and we didn't need to build anything this time through the
-    # loop.
-    #
-    # NOTE: We could just print out stats of the files that we built, but
-    # it is usually nice to have a summary of all files that we were asked
-    # to build...not just the ones that we actually built.
+    # in all of the output.  Don't show messages if we are looping due to
+    # "-l" option and we didn't need to build anything this time through
+    # the loop.
     for i in texfilelist:
         if not args.loop or (args.loop and len(triedToBuild) > 0):
             printPdfStatsBasename(stripTexEnding(i))
@@ -1380,8 +1377,7 @@ def processTexFiles():
 
 
 
-# Remove lockfile.  Automatically called
-# when exit() is called.
+# Remove lockfile. Automatically called when exit() is called.
 def cleanupLock():
     removeIfExist(lockfile)
     # Remove tmp now unless user requested that we keep it
