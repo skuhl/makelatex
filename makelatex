@@ -778,9 +778,18 @@ def optimizePdfopt(basename):
 # run makeindex, exits on error.
 def runMakeindex(basename):
     string = open("makelatex-tmp/latex-" + basename + ".log").read()
-    if re.search("Writing index file.*idx", string):
+    # traditional index
+    if os.path.exists("makelatex-tmp/" + basename + ".idx"):
         print(outfmt % (basename, "makeindex"))
         if runCommand("makeindex", [ "-q", "-t", "makelatex-tmp/makeindex-" + basename + ".log", "makelatex-tmp/" + basename + ".idx" ], shell=False, silentFail=False) != 0:
+            print(open("makelatex-tmp/makeindex-" + basename + ".log").read())
+            cleanupTexLogs(basename)
+            exit(1)
+        return True
+    # nomencl package:
+    if os.path.exists("makelatex-tmp/" + basename + ".nlo"):
+        print(outfmt % (basename, "makeindex"))
+        if runCommand("makeindex", [ "-q", "-t", "makelatex-tmp/makeindex-" + basename + ".log", "makelatex-tmp/" + basename + ".nlo", "-s", "nomencl.ist", "-o", "makelatex-tmp/" + basename + ".nls" ], shell=False, silentFail=False) != 0:
             print(open("makelatex-tmp/makeindex-" + basename + ".log").read())
             cleanupTexLogs(basename)
             exit(1)

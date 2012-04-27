@@ -1,8 +1,8 @@
 v0.92
- * Update version fields in makelatex and uconvert appropriately.
- * multibib support
+ * Add multibib support
+ * Add nomencl support
+ * Add glossaries support
  * Use qpdf (if available) for linearization instead of pdfopt
- * Add support for glossaries
  * Improve PDF statistics output
  * Improve paper size support
 
