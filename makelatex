@@ -24,8 +24,8 @@ import threading, traceback
 
 # used by both latex and pdflatex
 LATEX_ARGS="-file-line-error -interaction=nonstopmode -output-directory=makelatex-tmp"
-DVIPS_ARGS="-t letter -Ppdf -G0"
-PDFNUP_ARGS="--paper letterpaper --frame true --scale .85 --keepinfo --quiet"
+DVIPS_ARGS="-Ppdf -G0"
+PDFNUP_ARGS="--frame true --scale .85 --keepinfo --quiet"
 
 # PS2PDF argument listing:
 # http://pages.cs.wisc.edu/~ghost/doc/cvs/Ps2pdf.htm
@@ -741,16 +741,22 @@ def optimizePdfopt(basename):
     orig = basename + ".pdf"
     opt = "makelatex-tmp/" + basename + ".opt.pdf"
 
-    # If pdfopt is missing or if PDF is already linear, do nothing.
-    if not findFileInPaths("pdfopt") or getPdfStatsFilename(basename + ".pdf")['linear']:
+    if getPdfStatsFilename(basename + ".pdf")['linear']:
         return
 
-    # Linearize the PDF with pdfopt:
-    print(outfmt % (basename, "pdfopt linearized the PDF"))
-    runCommand("pdfopt", [ orig, opt ], shell=False, silentFail=True)
-    if os.path.exists(opt):
-        shutil.move(opt, orig)
+    if findFileInPaths("qpdf"):
+        print(outfmt % (basename, "qpdf linearized the PDF"))
+        runCommand("qpdf", [ "--linearize", orig, opt ], shell=False, silentFail=True)
+        if os.path.exists(opt):
+            shutil.move(opt, orig)
+        return
 
+    if findFileInPaths("pdfopt"):
+        print(outfmt % (basename, "pdfopt linearized the PDF"))
+        runCommand("pdfopt", [ orig, opt ], shell=False, silentFail=True)
+        if os.path.exists(opt):
+            shutil.move(opt, orig)
+        return
 
 
 # Runs makeindex if necessary. Returns True/False depending on if we had to

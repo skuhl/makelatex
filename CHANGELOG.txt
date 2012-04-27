@@ -1,6 +1,7 @@
 v0.92
  * Update version fields in makelatex and uconvert appropriately.
  * multibib support
+ * Use qpdf (if available) for linearization instead of pdfopt
 
 v0.91 - 27 Apr 2012
  * Moved temporary files from "tmp" to "makelatex-tmp". Without this change, anybody with important files in a subdirectory named "tmp" may lose their files.
