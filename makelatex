@@ -648,11 +648,14 @@ def ps2pdf(args, infile, outfile, optimize=True):
     command = PS2PDF_ARGS.split()
     command.append(infile)
     command.append(outfile)
+
     if runCommand("ps2pdf", command, shell=False, silentFail=True) == None:
         # If ps2pdf doesn't appear to be installed, return false:
         return False
 
     if os.path.exists(outfile):
+        if infile.endswith(".ps"):
+            return True
         if not copyMetadata(infile, outfile):
             printWarn(outfmt % (outfile[0:-4], "Might have incorrect metadata."))
         if optimize:
