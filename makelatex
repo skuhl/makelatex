@@ -438,12 +438,15 @@ def runDvips(basename):
         printDvipsError(basename)
         printError("ERROR: dvips failed")
         return False
-
     removeIfExist(dvi)
     printDvipsError(basename)
 
     print(outfmt % (basename, "ps2pdf"))
-    if not ps2pdf(PS2PDF_ARGS, ps, basename + ".pdf", optimize=False):
+    # automatically rotate all pages one way depending on text direction
+    # to make landscape pages work with "-e latex"
+    if not ps2pdf(PS2PDF_ARGS.replace("-dAutoRotatePages=/None",
+                                      "-dAutoRotatePages=/All"),
+                  ps, basename + ".pdf", optimize=False):
         printError("ERROR: Could not create PDF (is ps2pdf in PATH?).")
         return False
     removeIfExist(ps)
@@ -646,7 +649,7 @@ def ps2pdf(args, infile, outfile, optimize=True):
         return False
 
     mtime = os.stat(infile).st_mtime
-    command = PS2PDF_ARGS.split()
+    command = args.split()
     command.append(infile)
     command.append(outfile)
 
