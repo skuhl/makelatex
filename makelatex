@@ -781,7 +781,6 @@ def optimizePdfopt(basename):
 # Runs makeindex if necessary. Returns True/False depending on if we had to
 # run makeindex, exits on error.
 def runMakeindex(basename):
-    string = open("makelatex-tmp/latex-" + basename + ".log").read()
     # traditional index
     if os.path.exists("makelatex-tmp/" + basename + ".idx"):
         print(outfmt % (basename, "makeindex"))
