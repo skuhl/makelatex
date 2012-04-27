@@ -394,7 +394,7 @@ def runLatex(basename, exe=None):
 # Returns the return code. If silentFail=True, returns None if the exe is
 # not found. If silentFail=False, exit and print stack trace if executable
 # is not found.
-def runCommand(exe, args, path=os.environ['PATH'], shell=False, silentFail=False):
+def runCommand(exe, args, path=os.environ['PATH'], shell=False, silentFail=False, wd=None):
     fullpath = findFileInPaths(exe, path)
     if fullpath == None:
         if silentFail:
@@ -410,14 +410,12 @@ def runCommand(exe, args, path=os.environ['PATH'], shell=False, silentFail=False
         exit(1)
 
     if shell:
-#        print "Running: " + exe + " " + args
-        return subprocess.call(exe + " " + args, shell=True)
+        ps = subprocess.Popen(exe + " " + args, shell=True, cwd=wd)
     else:
         exe = [ exe ]
         exe.extend(args)
-#        print "Running: "
-#        print exe
-        return subprocess.call(exe)
+        ps = subprocess.Popen(exe, cwd=wd)
+    return ps.wait()
 
 
 # Runs latex, dvips, ps2pdf
@@ -773,6 +771,20 @@ def runMakeindex(basename):
     return False
 
 
+# Runs makeglossaries if necessary. Returns True/False depending on if we had to
+# run makeglossaries, exits on error.
+def runMakeglossaries(basename):
+    if not os.path.exists("makelatex-tmp/" + basename + ".glo"):
+        return False
+
+    print(outfmt % (basename, "makeglossaries"))
+
+    if runCommand("makeglossaries", basename + "> makeglossaries-" + basename + ".log", shell=True, wd="makelatex-tmp") != 0:
+        print(open("makelatex-tmp/makeglossaries-" + basename + ".log").read())
+        cleanupTexLogs(basename)
+        exit(1)
+
+    return True
 
 # Runs bibtex if necessary. Returns True/False depending on if we had to
 # run bibtex, exits on error.
@@ -1206,6 +1218,7 @@ def processTexFile(texfile):
     # If we have to run bibtex or makeindex, we have to rerun latex at least one time
     mustRunAgain = runBibtex(basename)
     mustRunAgain = mustRunAgain + runMakeindex(basename)
+    mustRunAgain = mustRunAgain + runMakeglossaries(basename)
     if mustRunAgain:
         runLatex(basename)
 
