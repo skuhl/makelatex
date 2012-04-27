@@ -286,9 +286,10 @@ def initialSetup():
     # We depend on some environment variables containins a list of paths.
     # If these variables are not set, set them to the current directory.
     envs = [ "TEXINPUTS", "BIBINPUTS" ]
-    for e in envs:
-        if not e in os.environ:
-            os.environ[e] = "."
+    # Sometimes we run programs in the makelatex-tmp directory and we need them to see the files in the actual directory.
+    os.environ['TEXINPUTS'] = os.getcwd() + ":" + os.environ['TEXINPUTS']
+    os.environ['BIBINPUTS'] = os.getcwd() + ":" + os.environ['BIBINPUTS']
+
 
     # Set uconvert environment variables:
     os.environ['UCONVERT_DEST_DIR']=tmpUconvertDir
@@ -816,18 +817,14 @@ def runMakeglossaries(basename):
 # run bibtex, exits on error.
 def runBibtex(basename):
     string = open("makelatex-tmp/latex-" + basename + ".log").read()
-    if not re.search("Citation.*undefined", string):
+    bibtexargs = findMatches( [ "^No file (.*)\.bbl" ], "makelatex-tmp/" + basename+".log")
+    if len(bibtexargs) == 0:
         return False
-
-    # multibib support: We may have to run bibtex multiple times.
-    bibtexargs = [ basename ]
-    bibtexargs.extend(findMatches(["^[^%]*\\\\newcites{(.*)}{.*}"], basename+".tex"))
-    bibtexargs = dedup(bibtexargs)
 
     for basename in bibtexargs:
         print(outfmt % (basename, "bibtex"))
         command = "bibtex makelatex-tmp/" + basename + "> makelatex-tmp/bibtex-" + basename + ".log"
-        if runCommand("bibtex", "makelatex-tmp/" + basename + "> makelatex-tmp/bibtex-" + basename + ".log", shell=True) != 0:
+        if runCommand("bibtex", basename + "> bibtex-" + basename + ".log", shell=True, wd="makelatex-tmp") != 0:
             print(open("makelatex-tmp/bibtex-" + basename + ".log").read())
             cleanupTexLogs(basename)
             exit(1)

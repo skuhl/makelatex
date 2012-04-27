@@ -1,5 +1,5 @@
 v0.92
- * Add multibib support
+ * Add multibib and chapterbib support
  * Add nomencl support
  * Add glossaries support
  * Use qpdf (if available) for linearization instead of pdfopt
