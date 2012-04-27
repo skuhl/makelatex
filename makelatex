@@ -1156,6 +1156,12 @@ def createNupHandout(basename):
     outfile = basename+".handout.pdf"
     commandargs = ["--outfile", outfile]
     commandargs.extend(PDFNUP_ARGS.split())
+    # use same paper size as input PDF if it is letter or A4
+    pageSize = getPdfStatsFilename(basename + ".pdf")['pageSize']
+    if [[ pageSize == "letter" ]]:
+        commandargs.extend(["--paper", "letterpaper"])
+    elif [[ pageSize == "A4" ]]:
+        commandargs.extend(["--paper", "a4paper"])
     commandargs.append(basename+".pdf")  # input file
 
     print(outfmt % (basename, "pdfnup"))
@@ -1172,6 +1178,12 @@ def createNupPort(basename):
     commandargs = ["--outfile", outfile]
     commandargs.extend(PDFNUP_ARGS.split())
     commandargs.extend(["--no-landscape", "--nup", args.nupPort])
+    # use same paper size as input PDF if it is letter or A4
+    pageSize = getPdfStatsFilename(basename + ".pdf")['pageSize']
+    if [[ pageSize == "letter" ]]:
+        commandargs.extend(["--paper", "letterpaper"])
+    elif [[ pageSize == "A4" ]]:
+        commandargs.extend(["--paper", "a4paper"])
     commandargs.append(basename+".pdf")  # input file
 
     print(outfmt % (basename, "pdfnup"))
@@ -1188,7 +1200,14 @@ def createNupLand(basename):
     commandargs = ["--outfile", outfile]
     commandargs.extend(PDFNUP_ARGS.split())
     commandargs.extend(["--landscape", "--nup", args.nupLand])
+    # use same paper size as input PDF if it is letter or A4
+    pageSize = getPdfStatsFilename(basename + ".pdf")['pageSize']
+    if [[ pageSize == "letter" ]]:
+        commandargs.extend(["--paper", "letterpaper"])
+    elif [[ pageSize == "A4" ]]:
+        commandargs.extend(["--paper", "a4paper"])
     commandargs.append(basename+".pdf")  # input file
+
 
     print(outfmt % (basename, "pdfnup"))
     runCommand("pdfnup", commandargs, shell=False)
