@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{glossaries}
+\usepackage{lipsum}
+
+\makeglossaries
+
+\begin{document}
+
+\newglossaryentry{makelatex}
+{
+  name=makelatex,
+  description={Creates PDF documents}
+}
+
+
+\lipsum[1]
+\glsaddall % print all glossary entries even though we don't use them.
+\printglossaries
+\lipsum[2]
+
+\end{document}

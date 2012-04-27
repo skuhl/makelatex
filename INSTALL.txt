@@ -18,6 +18,7 @@ REQUIREMENTS:
  * pdffonts, pdfinfo (from poppler-utils)
  * bash shell (used by uconvert)
  * grep, touch
+ * qpdf (recommended) or pdfopt (from ghostscript) for PDF linearization
  * Recommended: pdftk
  * Optional: pdfnup and pdfjam-slides3up (from pdfjam package)
 
