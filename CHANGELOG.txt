@@ -3,6 +3,7 @@ v0.92
  * multibib support
  * Use qpdf (if available) for linearization instead of pdfopt
  * Add support for glossaries
+ * Improve PDF statistics output
 
 v0.91 - 27 Apr 2012
  * Moved temporary files from "tmp" to "makelatex-tmp". Without this change, anybody with important files in a subdirectory named "tmp" may lose their files.

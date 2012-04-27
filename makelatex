@@ -539,8 +539,22 @@ def getPdfStatsFilename(filename):
         if line.startswith("Pages:"):
             numPages = int(str(line[16:]).strip())
         if line.startswith("Page size:"):
-            pageSize = str(line[16:]).strip().replace(" x ", "x").replace(" pts", "pts")
+            # use text in parenthesis if it is available
+            tmp = str(line[16:]).strip()
+            tmp = tmp.replace(" x ", "x")
+            tmp = tmp.replace(" pts", "pts")
+            if tmp.count("(") and tmp.count(")"):
+                tmp = tmp.replace("(", "")
+                tmp = tmp.replace(")", "")
+                pageSize = tmp.split(" ")[1] + " paper"
+            else:
+                pageSize = tmp.split(" ")[0]
 
+
+    pdfver = findMatches([ "PDF version:(.*)" ], pdfinfo)
+    if pdfver[0]:
+        pdfver = pdfver[0]
+        pdfver = pdfver.strip()
 
     # Check for fonts that are not embedded or are bitmapped.
     lines = 0
@@ -570,23 +584,23 @@ def getPdfStatsFilename(filename):
              "unembeddedFonts": unembeddedFonts,
              "type3Fonts": type3Fonts,
              "totalFonts": totalFonts,
-             "linear": linear}
+             "linear": linear,
+             "pdfversion": pdfver}
 
 def printPdfStats(stats):
     if not stats:
         return
 
     if stats['numPages'] == 1:
-        string = "%3d %s" % (stats['numPages'], "page;  ")
+        string = "%2d %s" % (stats['numPages'], "pg;  ")
     else:
-        string = "%3d %s" % (stats['numPages'], "pages; ")
+        string = "%2d %s" % (stats['numPages'], "pgs; ")
 
-    string = string + ("%7s; " % humanSize(stats['fileSize']))
+    string = string + (" %4s; " % humanSize(stats['fileSize']))
     string = string + stats['pageSize'] + "; "
+    string = string + "PDFv" + stats['pdfversion']
     if stats['linear']:
-        string = string + "linearized"
-    else:
-        string = string + "non-linear"
+        string = string + "(linear)"
 
     print(outfmt % (stats['basename'], string))
 
