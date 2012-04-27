@@ -610,7 +610,7 @@ def printPdfStats(stats):
 # Given a basename, print out statistics for any PDFs that we might have
 # created.
 def printPdfStatsBasename(basename):
-    extlist = ".pdf .grey.pdf .screen.pdf .handout.pdf .2x1.pdf .1x2.pdf 3x1.pdf 1x3.pdf 2x2.pdf 3x2.pdf 2x3.pdf"
+    extlist = ".pdf .grey.pdf .screen.pdf .handout.pdf .2x1.pdf .1x2.pdf .3x1.pdf 1x3.pdf .2x2.pdf 3x2.pdf 2x3.pdf"
     for e in extlist.split():
         stats = getPdfStatsFilename(basename+e)
         printPdfStats(stats)
