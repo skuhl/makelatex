@@ -1,3 +1,6 @@
+v0.93 -
+ * 
+
 v0.92 - 27 Apr 2012
  * Several bug fixes
  * Add multibib and chapterbib support
