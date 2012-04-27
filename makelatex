@@ -1062,7 +1062,6 @@ def supportedImageExten(engine):
     if engine == "xelatex":
         return ".eps .pdf .png .jpg".split(" ")
 
-
 def convertImages(texfiles):
     if args.noconvert:
         return
@@ -1108,7 +1107,6 @@ def convertImages(texfiles):
 
         # Now, we are confident that there is no assume there isn't an extension:
 
-
         # Look for an existing image file that is in the format that is supported by our engine.
         choices = []
         paths = os.environ['TEXINPUTS_NOTMP']
@@ -1132,11 +1130,12 @@ def convertImages(texfiles):
             elif args.engine == "latex":
                 imageWithExten.append(image + ".eps")
             else:
-                # If using any other engine, ask uconvert for a PDF (TODO: Is this arbitrary choice is best?)
+                # If using any other engine, ask uconvert for a PDF 
+                # (TODO: Is this arbitrary choice is best?)
                 imageWithExten.append(image + ".pdf")
         else:
             # If we found an existing image in a supported format, use it.
-            exten = "." + choices[0][-len(choices[0].split('.')):]
+            exten = "." + choices[0].rsplit(".", 1)[1]
             imageWithExten.append(image + exten)
 
     # Now, imageWithExten contains all of the images that we are going to
