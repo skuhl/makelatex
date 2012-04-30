@@ -72,7 +72,15 @@ def printWarn(msg):
     """Prints a highlighted warning message to stdout."""
     print(bcolors.WARN + msg + bcolors.ENDC)
 
-
+# Gets an environment variable or returns an empty string if variable is
+# not set.
+def getEnviron(name):
+    """Gets an environment variable. Returns an empty string if variable is
+    not set"""
+    if name in os.environ:
+        return os.environ[name]
+    else:
+        return ""
 
 ## --------------------------------------
 ## Parse arguments:
@@ -131,9 +139,9 @@ parser.add_argument('--screen', action="store_true",
 parser.add_argument('--nonascii', action="store_true",
                     help="Don't warn about non-ASCII characters in tex files.")
 parser.add_argument('--nowarn', '--nowarnings', '--nw', action="store_true",
-                    help="Don't check for problems using lacheck, chktex or bibtex.")
+                    help="Don't check for problems using lacheck, chktex or bibtex prior to compiling document.")
 parser.add_argument('--quiet', '-q', action="store_true",
-                    help="Turns on --nowarn and only displays actual warnings/errors and PDF statistics.")
+                    help="Turns on --nowarn and --nonascii. Also hides other output except for warnings/errors and PDF statistics.")
 
 
 
@@ -157,6 +165,9 @@ def bname(path):
     return stripExten(fileOnly(path))
 
 def stripExten(filename, exten=None):
+    """Strips everything after that last . from the end of the filename. If
+    exten is set to a string, we will only remove the extension if it
+    matches that string"""
     if exten:
         if filename.endswith(exten):
             return filename[:-len(exten)]
@@ -165,13 +176,14 @@ def stripExten(filename, exten=None):
         return filename.rsplit('.', 1)[0]
 
 def stripTexEnding(string):
+    """Remove .tex from the end of the string (if it exists)"""
     return stripExten(string, ".tex")
 def stripPdfEnding(string):
+    """Remove .pdf from the end of the string (if it exists)"""
     return stripExten(string, ".pdf")
 
-
-# Converts a file/path with .tex ending to .pdf
 def texToPdf(path):
+    """Strips a .tex ending and adds a .pdf ending"""
     return stripTexEnding(path)+".pdf"
 
 
@@ -199,7 +211,8 @@ def makeSuggestions(texfiles):
         if os.path.exists(logfile) and len(open(logfile).read()):
             printWarn("lacheck warnings for " + i + " :")
             for line in open(logfile):
-                if len(line.strip()) == 0:
+                # Lines starting with ** indicate that lacheck read an \include file
+                if len(line.strip()) == 0 or line.startswith("** "):
                     continue
                 print(bcolors.BOLD + line.rstrip().replace("\""+i+"\", ", "") + bcolors.ENDC)
 
@@ -246,7 +259,7 @@ def getTexFiles():
 
     newtexs = []
     for t in texs:
-        newtexs.append(findFileInPaths(t, os.environ['TEXINPUTS']))
+        newtexs.append(findFileInPaths(t, getEnviron('TEXINPUTS')))
     texs = dedup(newtexs)
 
 
@@ -323,13 +336,13 @@ def filesMatchingRegex(regex, dir=os.getcwd()):
 # Get ready to run, put tex files to compile in args.texfiles variable
 def initialSetup():
     # Choose method to generate pdf if no choice is made by user
-    if not args.engine and "MAKELATEX_ENGINE" in os.environ and os.environ['MAKELATEX_ENGINE']:
-        args.engine = os.environ['MAKELATEX_ENGINE']
+    if not args.engine and len(getEnviron("MAKELATEX_ENGINE")):
+        args.engine = getEnviron('MAKELATEX_ENGINE')
 
     if not args.engine:
-        if findFileInPaths("xelatex", os.environ['PATH']):
+        if findFileInPaths("xelatex", getEnviron('PATH')):
             args.engine = "xelatex"
-        elif findFileInPaths("pdflatex", os.environ['PATH']):
+        elif findFileInPaths("pdflatex", getEnviron('PATH')):
             args.engine = "pdflatex"
         else:
             args.engine = "latex"
@@ -375,22 +388,21 @@ def initialSetup():
 
     # Sometimes we run programs in the makelatex-tmp directory and we need
     # them to see the files in the actual directory.
-    os.environ['TEXINPUTS'] = os.getcwd() + ":" + os.environ['TEXINPUTS']
-    os.environ['BIBINPUTS'] = os.getcwd() + ":" + os.environ['BIBINPUTS']
+    os.environ['TEXINPUTS'] = os.getcwd() + ":" + getEnviron('TEXINPUTS')
+    os.environ['BIBINPUTS'] = os.getcwd() + ":" + getEnviron('BIBINPUTS')
 
-    # Find path to style 
-    os.environ['TEXINPUTS'] = os.environ['TEXINPUTS']+":"+re.search("TEXMFDIST\s*=\s*(.*)", open("/usr/share/texmf/web2c/texmf.cnf").read()).group(1)+"/"
-
+    # Check for uconvert in our current directory.
+    os.environ['PATH'] = getEnviron('PATH')+":"+os.getcwd()
 
     # Set uconvert environment variables:
-    os.environ['UCONVERT_DEST_DIR']=tmpUconvertDir
-    os.environ['UCONVERT_SRC_DIR']=os.environ["TEXINPUTS"]
+    os.environ['UCONVERT_DEST_DIR'] = tmpUconvertDir
+    os.environ['UCONVERT_SRC_DIR']  = getEnviron("TEXINPUTS")
     # We don't want to know about makelatex-tmp/uconvert when determining
     # dependencies---we want to depend on the original files.
-    os.environ['TEXINPUTS_NOTMP']=os.environ["TEXINPUTS"]
+    os.environ['TEXINPUTS_NOTMP'] = getEnviron("TEXINPUTS")
     # LaTeX needs to know about makelatex-tmp/uconvert:
     if not os.environ['TEXINPUTS'].startswith(MLTMP+"uconvert:"):
-        os.environ['TEXINPUTS']=MLTMP+"uconvert:" + os.environ['TEXINPUTS']
+        os.environ['TEXINPUTS']=MLTMP+"uconvert:" + getEnviron('TEXINPUTS')
 
     if os.path.exists(lockfile):
         print("Is this script running elsewhere? If not,")
@@ -473,9 +485,17 @@ def runLatex(basename, exe=None):
     return True
 
 
-def runCommand(exe, commandargs, path=os.environ['PATH'], shell=False, silentFail=False, wd=None):
-    """Runs a command. If shell=True, commandargs is a string and the program is run in a shell. If shell=False, commandargs is a list of argument strings. If we can't find the exe, we either silently fail (and return None) or exit (with an error message)"""
-    fullpath = findFileInPaths(exe, path)
+def runCommand(exe, commandargs, shell=False, silentFail=False, wd=None):
+    """Runs a command. If shell=True, commandargs is a string and the
+    program is run in a shell. If shell=False, commandargs is a list of
+    argument strings. If we can't find the exe, we either silently fail
+    (and return None) or exit (with an error message)"""
+
+    if not exe:
+        printError("Internal error: runCommand() with no exe.")
+        exit(1)
+
+    fullpath = findFileInPaths(exe)
     if fullpath == None:
         if silentFail:
             return None
@@ -911,6 +931,11 @@ def runBibtex(basename):
             print(open(MLTMP+"bibtex-"+basename+".log").read())
             exit(1)
 
+        else:
+            for line in open(MLTMP+"bibtex-"+basename+".log"):
+                if line.startswith("Warning--") or line.startswith("Repeated entry---"):
+                    print line.strip()
+
     return True
 
 
@@ -951,6 +976,7 @@ def printLatexWarn(basename):
                [ 0, 0, "No file"],
                [ 1, 1, "LaTeX Warning"],
                [ 1, 1, "pdfTeX Warning"],
+               [ 0, 2, "Package fontspec Warning:"],
                [ 0, 1, "Undefined control sequence"],
                [ 0, 1, "Runaway argument"],
                [ 0, 4, "./" + basename + ".tex:" ],
@@ -1059,13 +1085,14 @@ def findMatches(regexs, filename):
 def getImagesInTexFiles(texfiles):
     ret = []
     for i in texfiles:
-        ret.extend(findMatches([ "^[^%]*\\\\includegraphics\[.*\]{([^}]*)}",
+        ret.extend(findMatches([ "^[^%]*\\\\includegraphics\[[^]]*\]{([^}]*)}",
                                  "^[^%]*\\\\includegraphics{([^}]*)}" ], i))
     return dedup(ret)
 
 # Returns a list of images in a single texfile
 def getImagesInTexFile(texfile):
     return getImagesInTexFiles([texfile])
+
 
 
 # Returns a list of .sty files, .bib files, included .tex files, and
@@ -1077,13 +1104,25 @@ def getIncludedInTex(texfile, depth=3):
     if texfile.startswith("/"):
         incList.append(texfile)
     else:
-        incList.append(findFileInPaths(texfile, os.environ['TEXINPUTS']))
+        incList.append(findFileInPaths(texfile, getEnviron('TEXINPUTS')))
 
     if depth <= 0:
         return incList
 
     matches = []
     matches.extend(findMatches(["^[^%]*\\\\bibliography{(.*)}"], texfile))
+
+    # Include the graphicspath in our TEXINPUTS path so uconvert can find images
+    gpath = findMatches(["^[^%]*\\\\graphicspath{{(.*)}}"], texfile)
+    for i in gpath:
+        entries = i.split('}{');
+        currentInputs = getEnviron("TEXINPUTS").split(':')
+        for e in entries:
+            if currentInputs.count(e) == 0:
+                os.environ["TEXINPUTS"] =       e + ":" + getEnviron("TEXINPUTS")
+                os.environ["TEXINPUTS_NOTMP"] = e + ":" + getEnviron("TEXINPUTS_NOTMP")
+                os.environ['UCONVERT_SRC_DIR']= getEnviron("TEXINPUTS")
+
 
     # multibib support: find other bibtex files that are used
     mbibNames = findMatches(["^[^%]*\\\\newcites{(.*)}{.*}"], texfile)
@@ -1092,11 +1131,11 @@ def getIncludedInTex(texfile, depth=3):
     matches = dedup(matches)
     for match in matches:
         for s in match.split(","):  # multiple files can be comma delimited
-            name = findFileInPaths(s+".bib", os.environ['BIBINPUTS'])
+            name = findFileInPaths(s+".bib", getEnviron('BIBINPUTS'))
             if name and incList.count(name) == 0:
                 incList.append(name)
 
-    texinputs = os.environ['TEXINPUTS_NOTMP']
+    texinputs = getEnviron('TEXINPUTS_NOTMP')
 
     matches = findMatches(["^[^%]*\\\\usepackage\[.*\]{([^}]*)}",
                            "^[^%]*\\\\usepackage{([^}]*)}" ], texfile)
@@ -1120,7 +1159,7 @@ def getIncludedInTex(texfile, depth=3):
 #                    printWarn("Potential dependency is missing: "+s+".sty" + " needed by "+texfile)
                 continue
             if incList.count(name) == 0:
-                # recursively handle dependencies
+                # recursively handle dependencies (and find the images in the file)
                 incList.extend(getIncludedInTex(name, depth=depth-1))
 
     # NOTE: \input will basically copy/paste the contents of the other file
@@ -1139,7 +1178,7 @@ def getIncludedInTex(texfile, depth=3):
             if incList.count(name) == 0:
                 incList.append(name)
                 # recursively handle dependencies:
-                incList.extend(getIncludedInTex(name, depth=depth-1))
+                incList.extend(findPotentialDependencies(name, depth=depth-1))
 
     matches = findMatches([ "^[^%]*\\\\includepdf\[.*\]{(.*)}",
                             "^[^%]*\\\\includepdf{(.*)}" ], texfile)
@@ -1161,12 +1200,15 @@ def getIncludedInTex(texfile, depth=3):
     return incList
 
 
-def findFileInPaths(name, paths=os.environ['PATH'], kpathsea=False):
+def findFileInPaths(name, paths=None, kpathsea=False):
     """Given a colon-delimited set of paths and a filename, look for the
     file in the paths and return path (or None if it doesn't exist in
-    paths). If kpathsea is set, we look for system files that match."""
+    paths). If kpathsea is set, we look for tex system files that match."""
+    if not paths:
+        paths = getEnviron('PATH')
+
     if kpathsea:
-        origEnviron = os.environ["TEXINPUTS"]
+        origEnviron = getEnviron("TEXINPUTS")
         os.environ["TEXINPUTS"]=paths
         path = os.popen("kpsewhich \""+name+"\"").read().strip()
         os.environ["TEXINPUTS"]=origEnviron
@@ -1201,7 +1243,7 @@ def findFileInPaths(name, paths=os.environ['PATH'], kpathsea=False):
 # * number of extensions added to it!
 #
 # Files in the "seen" list are not returned as potential dependencies.
-def findPotentialDependencies(texfile):
+def findPotentialDependencies(texfile, depth=3):
     depend = []
 # This isn't ideal because we don't know the file extension that we are
 # looking for. The convertImages() function will actually do the conversion
@@ -1211,11 +1253,11 @@ def findPotentialDependencies(texfile):
     images = getImagesInTexFile(texfile)
     for i in images:
         for e in exten:
-            f = findFileInPaths(i + e, os.environ['TEXINPUTS_NOTMP'])
+            f = findFileInPaths(i + e, getEnviron('TEXINPUTS_NOTMP'))
             if f:
                 depend.append(f)
 
-    depend.extend(getIncludedInTex(texfile))
+    depend.extend(getIncludedInTex(texfile, depth))
 
     if os.path.exists("./prepost.sh"):
         depend.append("./prepost.sh")
@@ -1257,7 +1299,13 @@ def convertImages(texfiles):
     # because different engines support different file formats, this gets
     # a little complex:
     imageWithExten = []
-    for image in getImagesInTexFiles(texfiles):
+
+	# The tex files may include other tex files that include images
+    texfilesWithDep = []
+    for t in texfiles:
+        texfilesWithDep.extend(getIncludedInTex(t))
+
+    for image in getImagesInTexFiles(texfilesWithDep):
         # image is the image name as it appears in the tex file!
         imageLow = image.lower()
 
@@ -1291,7 +1339,7 @@ def convertImages(texfiles):
 
         # Look for an existing image file that is in the format that is supported by our engine.
         choices = []
-        paths = os.environ['TEXINPUTS_NOTMP']
+        paths = getEnviron('TEXINPUTS_NOTMP')
         for i in supportedImageExten(args.engine):
             choices.append(findFileInPaths(image+i, paths))
         while None in choices:
@@ -1656,6 +1704,8 @@ def main():
             processTexFiles()
 
     except KeyboardInterrupt:
+        if os.path.exists("./prepost.sh"):
+            subprocess.call(['./prepost.sh', "interrupt"])
         print
         print("makelatex: Cleaning up...")
         exit(1)
