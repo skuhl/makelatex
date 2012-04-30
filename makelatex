@@ -1162,8 +1162,9 @@ def getIncludedInTex(texfile, depth=3):
 
 
 def findFileInPaths(name, paths=os.environ['PATH'], kpathsea=False):
-    """Given a colon-delimited set of paths and a filename, look for the file in
-# the paths and return path (or None if it doesn't exist in paths). If kpathsea is set, we look for system files that match."""
+    """Given a colon-delimited set of paths and a filename, look for the
+    file in the paths and return path (or None if it doesn't exist in
+    paths). If kpathsea is set, we look for system files that match."""
     if kpathsea:
         origEnviron = os.environ["TEXINPUTS"]
         os.environ["TEXINPUTS"]=paths
@@ -1338,7 +1339,7 @@ def convertImages(texfiles):
     if runCommand("uconvert", commandargs, shell=False) != 0:
         printWarn("WARNING: Failed to convert one or more images.")
 
-# paramName = actual parameter given to makelatex
+# paramName = actual parameter provided to makelatex
 # paramValue = true/false or the string given with the param to makelatex
 # command = The command that we need to run
 # otherCommandArgs = Extra parameters we need to give pdfnup.
