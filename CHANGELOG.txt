@@ -1,3 +1,6 @@
+v0.94
+ * 
+
 v0.93 - 30 Apr 2012
  * Run even if TEXINPUTS or other environment variables are not set.
  * Works correctly when makelatex, uconvert, and uconvert.conf are all in the same directory as the document (not installed).
