@@ -1,11 +1,26 @@
+% !TEX program = lualatex
 \documentclass[letterpaper,12pt]{article}
-
+\usepackage{fontspec}
+\setmainfont[Mapping=tex-text]{Arial}
+% For a more complete Unicode coverage, use Arial Unicode:
+% \setmainfont[Mapping=tex-text]{Arial Unicode MS}
+\usepackage{url}
 \begin{document}
 
-This line of text contains a non-ASCII look of disapproval ( ಠ_ಠ ) in parenthesis and should be printed by makelatex unless --nonascii is used. Also, this document may not build correctly!
+makelatex will warn about all non-ASCII characters in files unless --nonascii is used.
 
-This line contains all ASCII.
+This file is a UTF-8 encoded file and can be built using XeLaTeX or LuaLaTeX. However, many of the characters may be missing if your they are not supported by your font. Some of the examples below are from: \url{http://www.cl.cam.ac.uk/~mgk25/ucs/examples/UTF-8-demo.txt}
 
-Here is another non-ASCII char: è
+Look of disapproval: ಠ\_ಠ\\
+More Unicode: è ā ī ū ṃ ṅ ñ\\
+Euro symbol: €\\
+Math: ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)\\
+Greek: Σὲ γνωρίζω ἀπὸ τὴν κόψη\\
+Georgian: გთხოვთ ახლავე გაიაროთ\\
+Russian: Зарегистрируйтесь сейчас на Десятую\\
+Thai: แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช\\
+Ethiopian: ሰማይ አይታረስ ንጉሥ አይከሰስ።\\
+Runes: ᚻᛖ ᚳᚹᚫᚦ ᚦᚫᛏ\\
+Braille: ⡌⠁⠧⠑ ⠼⠁⠒  ⡍⠜⠇⠑⠹⠰⠎ ⡣⠕⠌\\
 
 \end{document}
