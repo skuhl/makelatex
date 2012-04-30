@@ -10,7 +10,7 @@ for i in *; do
         cd $i
         rubber --pdf *.tex
         echo "rubber returned status code: $?"
-        rm -f *.dvi *.idx *.ilg *.log *.ind *.aux *.aux *.out *.toc *.bbl *.blg
+        rm -f *.dvi *.ist *.idx *.ilg *.log *.ind *.aux *.aux *.out *.toc *.bbl *.blg *.glo *.nlo *.nav *.snm
         cd ..
     fi
 done
