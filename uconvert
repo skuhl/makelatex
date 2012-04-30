@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # uconvert - universal file conversion script
-VERSION="0.93"
+VERSION="0.92"
 # Author: Scott Kuhl
 # Website: http://www.cs.mtu.edu/~kuhl/software/makelatex
 
@@ -261,12 +261,28 @@ def processFile(arg):
 
     success = 0
     while line != 0 and success == 0:
-        line_in      = line.lstrip("IN: ")
-        line_out     = getline(conf).lstrip("OUT: ")
-        line_command = getline(conf).lstrip("COMMAND: ")
+        if not line.startswith("IN: "):
+            printError("uconvert ERROR: Problem near this line in uconvert.conf:")
+            print line
+            exit(1)
+        line_in = line[4:].strip()
 
         line = getline(conf)
+        if not line.startswith("OUT: "):
+            printError("uconvert ERROR: Problem near this line in uconvert.conf:")
+            print line
+            exit(1)
+        line_out = line[5:].strip()
 
+        line = getline(conf)
+        if not line.startswith("COMMAND: "):
+            printError("uconvert ERROR: Problem near this line in uconvert.conf:")
+            print line
+            exit(1)
+        line_command = line[9:].strip()
+
+        # get line for next time through loop
+        line = getline(conf)
         if convertfile(line_in.split(),
                        line_out.split(),
                        line_command, arg):

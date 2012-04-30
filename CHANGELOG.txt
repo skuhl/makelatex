@@ -1,5 +1,16 @@
 v0.93 -
- * 
+ * Improve \include{} dependency checking
+ * Run ps2pdf if fonts are not compact, not subsetted or not embedded.
+ * If screen-quality PDF is larger than than the original, use the original.
+ * General code cleanup/consolidation
+ * Detect when we need to rerun for beamer navigation
+ * Parse log files in Python; remove grep dependency
+ * chktex, lacheck, bibcheck support: checks for common errors
+ * Specify engine using MAKELATEX_ENGINE environment variable
+ * Support "% !TEX program = engine" (where engine is latex, pdflatex, etc.)
+   directive in first if in first line of .tex file. It overrides all other
+   engine selection mechanisms.
+
 
 v0.92 - 27 Apr 2012
  * Several bug fixes
