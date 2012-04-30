@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# makelatex - version: 0.92
+# makelatex - version: 0.93
 # http://www.cs.mtu.edu/~kuhl/software/makelatex
 #
 #
@@ -286,9 +286,10 @@ def initialSetup():
     # We depend on some environment variables containins a list of paths.
     # If these variables are not set, set them to the current directory.
     envs = [ "TEXINPUTS", "BIBINPUTS" ]
-    for e in envs:
-        if not e in os.environ:
-            os.environ[e] = "."
+    # Sometimes we run programs in the makelatex-tmp directory and we need them to see the files in the actual directory.
+    os.environ['TEXINPUTS'] = os.getcwd() + ":" + os.environ['TEXINPUTS']
+    os.environ['BIBINPUTS'] = os.getcwd() + ":" + os.environ['BIBINPUTS']
+
 
     # Set uconvert environment variables:
     os.environ['UCONVERT_DEST_DIR']=tmpUconvertDir
@@ -437,12 +438,15 @@ def runDvips(basename):
         printDvipsError(basename)
         printError("ERROR: dvips failed")
         return False
-
     removeIfExist(dvi)
     printDvipsError(basename)
 
     print(outfmt % (basename, "ps2pdf"))
-    if not ps2pdf(PS2PDF_ARGS, ps, basename + ".pdf", optimize=False):
+    # automatically rotate all pages one way depending on text direction
+    # to make landscape pages work with "-e latex"
+    if not ps2pdf(PS2PDF_ARGS.replace("-dAutoRotatePages=/None",
+                                      "-dAutoRotatePages=/All"),
+                  ps, basename + ".pdf", optimize=False):
         printError("ERROR: Could not create PDF (is ps2pdf in PATH?).")
         return False
     removeIfExist(ps)
@@ -645,7 +649,7 @@ def ps2pdf(args, infile, outfile, optimize=True):
         return False
 
     mtime = os.stat(infile).st_mtime
-    command = PS2PDF_ARGS.split()
+    command = args.split()
     command.append(infile)
     command.append(outfile)
 
@@ -777,7 +781,6 @@ def optimizePdfopt(basename):
 # Runs makeindex if necessary. Returns True/False depending on if we had to
 # run makeindex, exits on error.
 def runMakeindex(basename):
-    string = open("makelatex-tmp/latex-" + basename + ".log").read()
     # traditional index
     if os.path.exists("makelatex-tmp/" + basename + ".idx"):
         print(outfmt % (basename, "makeindex"))
@@ -816,18 +819,14 @@ def runMakeglossaries(basename):
 # run bibtex, exits on error.
 def runBibtex(basename):
     string = open("makelatex-tmp/latex-" + basename + ".log").read()
-    if not re.search("Citation.*undefined", string):
+    bibtexargs = findMatches( [ "^No file (.*)\.bbl" ], "makelatex-tmp/" + basename+".log")
+    if len(bibtexargs) == 0:
         return False
-
-    # multibib support: We may have to run bibtex multiple times.
-    bibtexargs = [ basename ]
-    bibtexargs.extend(findMatches(["^[^%]*\\\\newcites{(.*)}{.*}"], basename+".tex"))
-    bibtexargs = dedup(bibtexargs)
 
     for basename in bibtexargs:
         print(outfmt % (basename, "bibtex"))
         command = "bibtex makelatex-tmp/" + basename + "> makelatex-tmp/bibtex-" + basename + ".log"
-        if runCommand("bibtex", "makelatex-tmp/" + basename + "> makelatex-tmp/bibtex-" + basename + ".log", shell=True) != 0:
+        if runCommand("bibtex", basename + "> bibtex-" + basename + ".log", shell=True, wd="makelatex-tmp") != 0:
             print(open("makelatex-tmp/bibtex-" + basename + ".log").read())
             cleanupTexLogs(basename)
             exit(1)
@@ -1063,7 +1062,6 @@ def supportedImageExten(engine):
     if engine == "xelatex":
         return ".eps .pdf .png .jpg".split(" ")
 
-
 def convertImages(texfiles):
     if args.noconvert:
         return
@@ -1109,7 +1107,6 @@ def convertImages(texfiles):
 
         # Now, we are confident that there is no assume there isn't an extension:
 
-
         # Look for an existing image file that is in the format that is supported by our engine.
         choices = []
         paths = os.environ['TEXINPUTS_NOTMP']
@@ -1133,11 +1130,12 @@ def convertImages(texfiles):
             elif args.engine == "latex":
                 imageWithExten.append(image + ".eps")
             else:
-                # If using any other engine, ask uconvert for a PDF (TODO: Is this arbitrary choice is best?)
+                # If using any other engine, ask uconvert for a PDF 
+                # (TODO: Is this arbitrary choice is best?)
                 imageWithExten.append(image + ".pdf")
         else:
             # If we found an existing image in a supported format, use it.
-            exten = "." + choices[0][-len(choices[0].split('.')):]
+            exten = "." + choices[0].rsplit(".", 1)[1]
             imageWithExten.append(image + exten)
 
     # Now, imageWithExten contains all of the images that we are going to

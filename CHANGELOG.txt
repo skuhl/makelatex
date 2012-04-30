@@ -1,8 +1,12 @@
-v0.92
- * Add multibib support
+v0.93 -
+ * 
+
+v0.92 - 27 Apr 2012
+ * Several bug fixes
+ * Add multibib and chapterbib support
  * Add nomencl support
  * Add glossaries support
- * Use qpdf (if available) for linearization instead of pdfopt
+ * Use qpdf (if available) for linearization, fall back to pdfopt
  * Improve PDF statistics output
  * Improve paper size support
 
