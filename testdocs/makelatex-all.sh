@@ -3,6 +3,7 @@
 # Unset any environment variables:
 unset MAKELATEX_ENGINE BIBINPUTS TEXINPUTS TEXINPUTS_NOTMP UCONVERT_SRC_DIR UCONVERT_DEST_DIR
 
+# Make sure we use the right makelatex and uconvert
 PATH="../..:$PATH"
 
 # kill the script entirely if ctrl+c is pressed
@@ -16,6 +17,10 @@ for i in *; do
         cd $i
         makelatex -q -o -f --screen --greyscale --nupHandout --nupPort 2x1
         echo "makelatex returned status code: $?"
+        echo
+        echo "Working in $i using Python 3"
+        # TODO: This doesn't force uconvert through Python 3.
+        python3 ../../makelatex -q -o -f --screen --greyscale --nupHandout --nupPort 2x1
         cd ..
     fi
 done
