@@ -1,5 +1,7 @@
 v0.94
- * 
+ * Use bibtex8 executable (if available) instead of bibtex
+ * Added test document to check for biblatex support
+ * Cleanup files in some error situations
 
 v0.93 - 30 Apr 2012
  * Run even if TEXINPUTS or other environment variables are not set.

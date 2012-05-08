@@ -590,8 +590,9 @@ def copyMetadata(src, dest):
         return False
 
 
-# Removes PDF, tmp directory, and all of the files that latex makes
-def cleanupEverything(texfiles):
+# Removes PDFs, tmp directory, and all of the files that latex makes
+# If texfiles is empty, we will not remove PDFs.
+def cleanupEverything(texfiles=[]):
     # remove the makelatex-tmp directory
     if os.path.exists(MLTMP):
         shutil.rmtree(MLTMP)
@@ -925,9 +926,15 @@ def runBibtex(basename):
     if len(bibtexargs) == 0:
         return False
 
+    exe = findFileInPaths("bibtex8")
+    if not exe:
+        exe = "bibtex"
+
     for basename in bibtexargs:
-        if not args.quiet: print(outfmt % (basename, "bibtex"))
-        if runCommand("bibtex", basename + "> bibtex-" + basename+".log", shell=True, wd=MLTMP) != 0:
+        if not args.quiet: print(outfmt % (basename, bname(exe)))
+        # bibtex8 returns 0 for OK run, 1 for warnings, 2 for errors
+        # bibtex returns 0 for OK run/warnings, 2 for errors
+        if runCommand(exe, basename + "> bibtex-" + basename+".log", shell=True, wd=MLTMP) > 1:
             print(open(MLTMP+"bibtex-"+basename+".log").read())
             exit(1)
 
@@ -1458,7 +1465,7 @@ def processTexFile(path):
     if not runOK:
         printLatexWarn(basename)
         printError("ERROR: Latex indicated an error (but PDF may have been created).")
-        printWarn("Suggestion: If you don't see errors above, run makelatex with -k option and look in log files stored in the \"" + MLTMP + "\" subdirectory.")
+        printWarn("Suggestion: If you don't see errors above, run makelatex with -fk options and look in log files stored in the \"" + MLTMP + "\" subdirectory.")
 
         # Sleep for 5 seconds if we are looping so that we don't just
         # repeatedly recompile the file over and over again.
