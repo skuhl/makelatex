@@ -388,11 +388,11 @@ def initialSetup():
 
     # Sometimes we run programs in the makelatex-tmp directory and we need
     # them to see the files in the actual directory.
-    os.environ['TEXINPUTS'] = os.getcwd() + ":" + getEnviron('TEXINPUTS')
-    os.environ['BIBINPUTS'] = os.getcwd() + ":" + getEnviron('BIBINPUTS')
+    os.environ['TEXINPUTS'] = os.getcwd() + os.pathsep + getEnviron('TEXINPUTS')
+    os.environ['BIBINPUTS'] = os.getcwd() + os.pathsep + getEnviron('BIBINPUTS')
 
     # Check for uconvert in our current directory.
-    os.environ['PATH'] = getEnviron('PATH')+":"+os.getcwd()
+    os.environ['PATH'] = getEnviron('PATH')+os.pathsep+os.getcwd()
 
     # Set uconvert environment variables:
     os.environ['UCONVERT_DEST_DIR'] = tmpUconvertDir
@@ -1093,8 +1093,9 @@ def findMatches(regexs, filename):
 def getImagesInTexFiles(texfiles):
     ret = []
     for i in texfiles:
-        ret.extend(findMatches([ "^[^%]*\\\\includegraphics\[[^]]*\]{([^}]*)}",
-                                 "^[^%]*\\\\includegraphics{([^}]*)}" ], i))
+        if not i.endswith(".pdf"):
+            ret.extend(findMatches([ "^[^%]*\\\\includegraphics\[[^]]*\]{([^}]*)}",
+                                     "^[^%]*\\\\includegraphics{([^}]*)}" ], i))
     return dedup(ret)
 
 # Returns a list of images in a single texfile
@@ -1121,14 +1122,19 @@ def getIncludedInTex(texfile, depth=3):
     matches.extend(findMatches(["^[^%]*\\\\bibliography{(.*)}"], texfile))
 
     # Include the graphicspath in our TEXINPUTS path so uconvert can find images
+    # Format: \graphicspath{{path1/}{path2/}{path3/}}
+    # The trailing / after each path is required
+    #
+    # TODO: This means that the path applies to all .tex files we are
+    # building---which may not be intended.
     gpath = findMatches(["^[^%]*\\\\graphicspath{{(.*)}}"], texfile)
     for i in gpath:
         entries = i.split('}{');
-        currentInputs = getEnviron("TEXINPUTS").split(':')
+        currentInputs = getEnviron("TEXINPUTS").split(os.pathsep)
         for e in entries:
             if currentInputs.count(e) == 0:
-                os.environ["TEXINPUTS"] =       e + ":" + getEnviron("TEXINPUTS")
-                os.environ["TEXINPUTS_NOTMP"] = e + ":" + getEnviron("TEXINPUTS_NOTMP")
+                os.environ["TEXINPUTS"] =       e + os.pathsep + getEnviron("TEXINPUTS")
+                os.environ["TEXINPUTS_NOTMP"] = e + os.pathsep + getEnviron("TEXINPUTS_NOTMP")
                 os.environ['UCONVERT_SRC_DIR']= getEnviron("TEXINPUTS")
 
 
@@ -1308,7 +1314,7 @@ def convertImages(texfiles):
     # a little complex:
     imageWithExten = []
 
-	# The tex files may include other tex files that include images
+    # The tex files may include other tex files that include images
     texfilesWithDep = []
     for t in texfiles:
         texfilesWithDep.extend(getIncludedInTex(t))
@@ -1343,9 +1349,10 @@ def convertImages(texfiles):
             imageWithExten.append(image)
             continue
 
-        # Now, we are confident that there is no assume there isn't an extension:
+        # Now, we are confident that there is no extension
 
-        # Look for an existing image file that is in the format that is supported by our engine.
+        # Look for an existing image file that is in the format that is
+        # supported by our engine.
         choices = []
         paths = getEnviron('TEXINPUTS_NOTMP')
         for i in supportedImageExten(args.engine):
@@ -1652,7 +1659,7 @@ def processTexFiles():
     # updating.
     texfilelist = getTexFiles()
     if len(texfilelist) > 0:
-        pdffilelist = map(texToPdf, texfilelist)
+        pdffilelist = list(map(texToPdf, texfilelist))
         callFunctionWithThreads(optimizePdf, pdffilelist)
         callFunctionWithThreads(greyscalePdf, pdffilelist)
         callFunctionWithThreads(screenPdf, pdffilelist)
@@ -1714,7 +1721,7 @@ def main():
     except KeyboardInterrupt:
         if os.path.exists("./prepost.sh"):
             subprocess.call(['./prepost.sh', "interrupt"])
-        print
+        print("")
         print("makelatex: Cleaning up...")
         exit(1)
 

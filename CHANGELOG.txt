@@ -1,15 +1,16 @@
 v0.94
  * Use bibtex8 executable (if available) instead of bibtex
- * Added test document to check for biblatex support
+ * Added test documents: biblatex and \graphicspath
+ * Fix Python 3 support, update testdoc script to ensure it doesn't happen again
  * Cleanup files in some error situations
 
 v0.93 - 30 Apr 2012
  * Run even if TEXINPUTS or other environment variables are not set.
- * Works correctly when makelatex, uconvert, and uconvert.conf are all in the same directory as the document (not installed).
+ * Works correctly when makelatex, uconvert, and uconvert.conf are in the same directory as the document (not installed).
  * Handle \graphicspath properly
  * Improve \include{} dependency checking
  * Run ps2pdf if fonts are not compact, not subsetted or not embedded.
- * If screen-quality PDF is larger than than the original, use the original.
+ * If screen-quality PDF is larger than the original, use the original.
  * General code cleanup/consolidation
  * Detect when we need to rerun for beamer navigation
  * Parse log files in Python; remove grep dependency
