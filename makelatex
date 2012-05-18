@@ -43,29 +43,29 @@ PDFNUP_PAPER = "letterpaper"
 # Same as above, but we don't insist on lossless images. For example,
 # lualatex will encode lossy images JPEG images---and then running the
 # resulting PDF through ps2pdf would then produce a much larger PDF:
-PS2PDF_ARGS = "-dPDFSETTINGS=/prepress" \
-    "-dAutoRotatePages=/None" \
-    "-dEmbedAllFonts=true" \
-    "-dMaxSubsetPct=100" \
-    "-dSubsetFonts=true" \
-    "-dAutoFilterColorImages=false" \
-    "-dAutoFilterGrayImages=false" \
-    "-dDownsampleColorImages=false" \
-    "-dDownsampleGrayImages=false" \
-    "-dDownsampleMonoImages=false"
+PS2PDF_ARGS = " -dPDFSETTINGS=/prepress " \
+    "-dAutoRotatePages=/None " \
+    "-dEmbedAllFonts=true " \
+    "-dMaxSubsetPct=100 " \
+    "-dSubsetFonts=true " \
+    "-dAutoFilterColorImages=false " \
+    "-dAutoFilterGrayImages=false " \
+    "-dDownsampleColorImages=false " \
+    "-dDownsampleGrayImages=false " \
+    "-dDownsampleMonoImages=false "
 
-PS2PDF_ARGS_SCREEN = "-dPDFSETTINGS=/screen" \
-    "-dAutoRotatePages=/None" \
-    "-dEmbedAllFonts=true" \
-    "-dMaxSubsetPct=100" \
-    "-dSubsetFonts=true" \
-    "-dColorImageResolution=150" \
-    "-dGrayImageResolution=150" \
-    "-dMonoImageResolution=300"
+PS2PDF_ARGS_SCREEN = " -dPDFSETTINGS=/screen " \
+    "-dAutoRotatePages=/None " \
+    "-dEmbedAllFonts=true " \
+    "-dMaxSubsetPct=100 " \
+    "-dSubsetFonts=true " \
+    "-dColorImageResolution=150 " \
+    "-dGrayImageResolution=150 " \
+    "-dMonoImageResolution=300 "
 
 PS2PDF_ARGS_GREY = PS2PDF_ARGS + " " \
-    "-sColorConversionStrategy=Gray" \
-    "-dProcessColorModel=/DeviceGray"
+    "-sColorConversionStrategy=Gray " \
+    "-dProcessColorModel=/DeviceGray "
 
 
 lockfile = ".makelatex.lock"
@@ -668,9 +668,9 @@ def cleanupEverything(texfiles=[]):
         # remove the PDF file and any stray dvi/ps files
         # that might still be around.
         # NOTE: We also remove some common nup pdfs
-        extlist = ".pdf .dvi .ps .tmp.pdf .grey.pdf" \
-	    ".screen.pdf .handout.pdf" \
-	    ".2x1.pdf .1x2.pdf .3x1.pdf .1x3.pdf" \
+        extlist = ".pdf .dvi .ps .tmp.pdf .grey.pdf " \
+	    ".screen.pdf .handout.pdf " \
+	    ".2x1.pdf .1x2.pdf .3x1.pdf .1x3.pdf " \
 	    ".2x2.pdf .3x2.pdf .2x3.pdf .synctex.gz"
         for e in extlist.split():
             removeIfExist(basename+e)

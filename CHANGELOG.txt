@@ -3,6 +3,7 @@ v0.94
  * Added test documents: biblatex and \graphicspath
  * Fix Python 3 support, update testdoc script to ensure it doesn't happen again
  * Cleanup files in some error situations
+ * Add --diff option to use latexdiff to show changes between two versions of a document.
 
 v0.93 - 30 Apr 2012
  * Run even if TEXINPUTS or other environment variables are not set.
