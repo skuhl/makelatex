@@ -1,3 +1,6 @@
+v0.95
+ * Keep makelatex-tmp directory if there was an error even if -k is not specified.
+
 v0.94 - 12 Jun 2012
  * Use bibtex8 executable (if available) instead of bibtex
  * Added test documents: biblatex and \graphicspath

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# makelatex - version: 0.95
+# makelatex - version: 0.94
 # http://www.cs.mtu.edu/~kuhl/software/makelatex
 #
 #
@@ -1556,7 +1556,8 @@ def processTexFile(path):
     if not runOK:
         printLatexWarn(basename)
         printError("ERROR: Latex indicated an error (but PDF may have been created).")
-        printWarn("Suggestion: If you don't see errors above, run makelatex with -fk options and look in log files stored in the \"" + MLTMP + "\" subdirectory.")
+        printWarn("Suggestion: If you don't see errors above, look at the log files in the \"" + MLTMP + "\" subdirectory.")
+        args.keep = True
 
         # Sleep for 5 seconds if we are looping so that we don't just
         # repeatedly recompile the file over and over again.
