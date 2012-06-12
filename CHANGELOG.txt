@@ -1,9 +1,11 @@
-v0.94
+v0.94 - 12 Jun 2012
  * Use bibtex8 executable (if available) instead of bibtex
  * Added test documents: biblatex and \graphicspath
  * Fix Python 3 support, update testdoc script to ensure it doesn't happen again
  * Cleanup files in some error situations
  * Add --diff option to use latexdiff to show changes between two versions of a document.
+ * Commented out bibcheck as it can be very verbose
+ * Fix problem where .bst files in the same directory as the document were not used
 
 v0.93 - 30 Apr 2012
  * Run even if TEXINPUTS or other environment variables are not set.

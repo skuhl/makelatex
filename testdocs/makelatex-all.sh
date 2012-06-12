@@ -26,4 +26,4 @@ for i in *; do
 done
 
 
-echo "All of these tests function correctly on a Ubuntu 12.04 with texlive-backports (2011) installed. Although, if you see an error, it could be a problem or it could be a missing package/font on your machine."
+echo "All of these tests function correctly on a Ubuntu 12.04 with texlive-backports (2012) installed. If you see an error, it could be a bug or it could be a missing package/font on your machine."
