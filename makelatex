@@ -220,16 +220,31 @@ def texToPdf(path):
 
 
 def makeSuggestions(texfiles):
-    """Runs chktex, lacheck, and bibcheck (if they are installed) to make
-    suggestions to the user"""
+    """Runs chktex and lacheck (if they are installed) to make
+    suggestions to the user. Also puts the output of diction, style, and
+    texcount in makelatex-tmp directory (if they are installed)."""
     if args.nowarn or args.quiet:
         return
 
-    # Change list of texfiles to basenames:
-    bnames = map(fileOnly, texfiles)
+    # Change list of texfiles to filename only (not full path):
+    filenames = map(fileOnly, texfiles)
+
+    for i in filenames:
+        logfile = MLTMP+"texcount-"+i+".log"
+        removeIfExist(logfile)
+        runCommand("texcount", i + " > " + logfile, shell=True, silentFail=True)
+
+        logfile = MLTMP+"diction-"+i+".log"
+        removeIfExist(logfile)
+        runCommand("diction", i + " > " + logfile, shell=True, silentFail=True)
+
+        logfile = MLTMP+"style-"+i+".log"
+        removeIfExist(logfile)
+        runCommand("style", fileOnly(i) + " > " + logfile, shell=True, silentFail=True)
 
     # chktex
-    for i in bnames:
+    for i in filenames:
+        i = bname(i)
         logfile = MLTMP+"chktex-"+i+".log"
         removeIfExist(logfile)
         runCommand("chktex", [ "-q", "-v3", "--nowarn", "1", "-o", logfile, i ], shell=False, silentFail=True)
@@ -239,7 +254,8 @@ def makeSuggestions(texfiles):
                 print(bcolors.BOLD + line.rstrip().replace("\""+i+"\", ", "") + bcolors.ENDC)
 
     # lacheck
-    for i in bnames:
+    for i in filenames:
+        i = bname(i)
         logfile = MLTMP+"lacheck-"+i+".log"
         runCommand("lacheck", i + " > " + logfile, shell=True, silentFail=True)
         if os.path.exists(logfile) and len(open(logfile).read()):
@@ -250,21 +266,22 @@ def makeSuggestions(texfiles):
                     continue
                 print(bcolors.BOLD + line.rstrip().replace("\""+i+"\", ", "") + bcolors.ENDC)
 
-    # bibcheck
-    depend = []
-    for i in bnames:
-        depend.extend(findPotentialDependencies(i))
-    depend = dedup(depend)
-    for d in depend:
-        if d.endswith(".bib"):
-            logfile = MLTMP+"bibcheck-"+bname(d)+".log"
-            runCommand("bibcheck", d + " > " + logfile, shell=True, silentFail=True)
-            if os.path.exists(logfile) and len(open(logfile).read()):
-                printWarn("bibcheck warnings for " + bname(d) + " :")
-                for line in open(logfile):
-                    if len(line.strip()) == 0:
-                        continue
-                    print(bcolors.BOLD + line.rstrip().replace(d+":", "line ") + bcolors.ENDC)
+    # bibcheck - commented out because it is too verbose.
+    # depend = []
+    # for i in filenames:
+    #     depend.extend(findPotentialDependencies(i))
+    # depend = dedup(depend)
+    # for d in depend:
+    #     if d.endswith(".bib"):
+    #         logfile = MLTMP+"bibcheck-"+bname(d)+".log"
+    #         runCommand("bibcheck", d + " > " + logfile, shell=True, silentFail=True)
+    #         if os.path.exists(logfile) and len(open(logfile).read()):
+    #             printWarn("bibcheck warnings for " + bname(d) + " :")
+    #             skipNextLineIfContinue=False
+    #             for line in open(logfile):
+    #                 if len(line.strip()) == 0:
+    #                     continue
+    #                 print(bcolors.BOLD + line.rstrip().replace(d+":", "line ") + bcolors.ENDC)
 
 
 
@@ -405,7 +422,7 @@ def initialSetup():
     # Allowed engines and their actual values:
     engines = { "xelatex"  : "xelatex",
                 "xetex"    : "xelatex",
-		        "x"        : "xelatex",
+                "x"        : "xelatex",
                 "pdflatex" : "pdflatex",
                 "latex"    : "latex",
                 "dvips"    : "latex",
@@ -445,6 +462,8 @@ def initialSetup():
     # them to see the files in the actual directory.
     os.environ['TEXINPUTS'] = os.getcwd() + os.pathsep + getEnviron('TEXINPUTS')
     os.environ['BIBINPUTS'] = os.getcwd() + os.pathsep + getEnviron('BIBINPUTS')
+    # Needed if a .bst file is in the same directory as the paper.
+    os.environ['BSTINPUTS'] = os.getcwd() + os.pathsep + getEnviron('BSTINPUTS')
 
     # Check for uconvert in our current directory.
     os.environ['PATH'] = getEnviron('PATH')+os.pathsep+os.getcwd()
@@ -669,9 +688,9 @@ def cleanupEverything(texfiles=[]):
         # that might still be around.
         # NOTE: We also remove some common nup pdfs
         extlist = ".pdf .dvi .ps .tmp.pdf .grey.pdf " \
-	    ".screen.pdf .handout.pdf " \
-	    ".2x1.pdf .1x2.pdf .3x1.pdf .1x3.pdf " \
-	    ".2x2.pdf .3x2.pdf .2x3.pdf .synctex.gz"
+            ".screen.pdf .handout.pdf " \
+            ".2x1.pdf .1x2.pdf .3x1.pdf .1x3.pdf " \
+            ".2x2.pdf .3x2.pdf .2x3.pdf .synctex.gz"
         for e in extlist.split():
             removeIfExist(basename+e)
 
