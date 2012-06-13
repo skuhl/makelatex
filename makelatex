@@ -258,7 +258,7 @@ def makeSuggestions(texfiles):
         i = bname(i)
         logfile = MLTMP+"lacheck-"+i+".log"
         runCommand("lacheck", i + " > " + logfile, shell=True, silentFail=True)
-        if os.path.exists(logfile) and len(open(logfile).read()):
+        if os.path.exists(logfile) and open(logfile).read().count(', line') > 0:
             printWarn("lacheck warnings for " + i + " :")
             for line in open(logfile):
                 # Lines starting with ** indicate that lacheck read an \include file
@@ -1202,9 +1202,6 @@ def getIncludedInTex(texfile, depth=3):
     if depth <= 0:
         return incList
 
-    matches = []
-    matches.extend(findMatches(["^[^%]*\\\\bibliography{(.*)}"], texfile))
-
     # Include the graphicspath in our TEXINPUTS path so uconvert can find images
     # Format: \graphicspath{{path1/}{path2/}{path3/}}
     # The trailing / after each path is required
@@ -1221,20 +1218,27 @@ def getIncludedInTex(texfile, depth=3):
                 os.environ["TEXINPUTS_NOTMP"] = e + os.pathsep + getEnviron("TEXINPUTS_NOTMP")
                 os.environ['UCONVERT_SRC_DIR']= getEnviron("TEXINPUTS")
 
+    # Find bibliography files that we are using
+    matches = []
+    matches.extend(findMatches(["^[^%]*\\\\bibliography{(.*)}"], texfile))
+    # \nobibliography is used by bibentries package
+    matches.extend(findMatches(["^[^%]*\\\\nobibliography{(.*)}"], texfile))
+
 
     # multibib support: find other bibtex files that are used
     mbibNames = findMatches(["^[^%]*\\\\newcites{(.*)}{.*}"], texfile)
     for i in mbibNames:
         matches.extend(findMatches(["^[^%]*\\\\bibliography"+i+"{(.*)}"], texfile))
+    # Split up the comma-separated entries into separate items
     matches = dedup(matches)
     for match in matches:
-        for s in match.split(","):  # multiple files can be comma delimited
+        for s in match.split(","):
             name = findFileInPaths(s+".bib", getEnviron('BIBINPUTS'))
             if name and incList.count(name) == 0:
                 incList.append(name)
 
+    # Find sty files that we depend on
     texinputs = getEnviron('TEXINPUTS_NOTMP')
-
     matches = findMatches(["^[^%]*\\\\usepackage\[.*\]{([^}]*)}",
                            "^[^%]*\\\\usepackage{([^}]*)}" ], texfile)
     for match in matches:
