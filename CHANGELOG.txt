@@ -2,6 +2,7 @@ v0.95
  * Keep makelatex-tmp directory if there was an error even if -k is not specified.
  * Minor improvement to lacheck output
  * Add better support for bibentry package
+ * makelatex now calls "./prepost.sh post-bibtex" every time that bibtex is called. This makes it possible to modify a .bbl file before before the document is created.
 
 v0.94 - 12 Jun 2012
  * Use bibtex8 executable (if available) instead of bibtex

@@ -1026,6 +1026,8 @@ def runBibtex(basename):
                 if line.startswith("Warning--") or line.startswith("Repeated entry---"):
                     print(bcolors.WARN + basename+": "+ bcolors.ENDC + line.strip())
 
+    if os.path.exists("./prepost.sh"):
+        subprocess.call(['./prepost.sh', "post-bibtex"])
 
     return True
 
