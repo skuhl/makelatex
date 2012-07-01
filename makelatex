@@ -1057,6 +1057,7 @@ def printLatexWarn(basename):
                [ 0, 0, "LaTeX Error"],
                [ 0, 0, "! I can't"],
                [ 0, 0, "!pdfTeX error"],
+               [ 0, 0, "---!"],
                [ 0, 0, "Fatal"],
                [ 0, 0, "not defined"],
                [ 0, 0, "undefined"],
