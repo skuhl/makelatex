@@ -159,10 +159,8 @@ parser.add_argument('--screen', action="store_true",
 # user really did want to use UTF8 (or some other encoding) in their files.
 parser.add_argument('--nonascii', action="store_true",
                     help="Don't warn about non-ASCII characters in tex files.")
-parser.add_argument('--nowarn', '--nowarnings', '--nw', action="store_true",
-                    help="Don't check for problems using lacheck, chktex or bibtex prior to compiling document.")
 parser.add_argument('--quiet', '-q', action="store_true",
-                    help="Turns on --nowarn and --nonascii. Also hides other output except for warnings/errors and PDF statistics.")
+                    help="Turns on --nonascii. Also hides other output except for warnings/errors and PDF statistics.")
 parser.add_argument('--diff', nargs=2, metavar=('old.tex', 'new.tex'),
                     help="Generates a PDF showing differences between two versions of a document (requires latexdiff command).")
 
@@ -223,7 +221,7 @@ def makeSuggestions(texfiles):
     """Runs chktex and lacheck (if they are installed) to make
     suggestions to the user. Also puts the output of diction, style, and
     texcount in makelatex-tmp directory (if they are installed)."""
-    if args.nowarn or args.quiet:
+    if args.quiet:
         return
 
     # Change list of texfiles to filename only (not full path):
@@ -247,41 +245,44 @@ def makeSuggestions(texfiles):
         i = bname(i)
         logfile = MLTMP+"chktex-"+i+".log"
         removeIfExist(logfile)
-        runCommand("chktex", [ "-q", "-v3", "--nowarn", "1", "-o", logfile, i ], shell=False, silentFail=True)
-        if os.path.exists(logfile) and len(open(logfile).read()):
-            printWarn("chktex warnings for " + i + " :")
-            for line in open(logfile):
-                print(bcolors.BOLD + line.rstrip().replace("\""+i+"\", ", "") + bcolors.ENDC)
+        runCommand("chktex", [ "-q", "-v3", "-o", logfile, i ], shell=False, silentFail=True)
+        if os.path.exists(logfile):
+            count = open(logfile).read().count(', line')
+            if count > 0:
+                issue = "issues"
+                if(count == 1):
+                    issue = "issue"
+                printWarn("chktex found " + str(count) + " " + issue + ". To view, run \"chktex " + i + "\"")
 
     # lacheck
     for i in filenames:
         i = bname(i)
         logfile = MLTMP+"lacheck-"+i+".log"
         runCommand("lacheck", i + " > " + logfile, shell=True, silentFail=True)
-        if os.path.exists(logfile) and open(logfile).read().count(', line') > 0:
-            printWarn("lacheck warnings for " + i + " :")
-            for line in open(logfile):
-                # Lines starting with ** indicate that lacheck read an \include file
-                if len(line.strip()) == 0 or line.startswith("** "):
-                    continue
-                print(bcolors.BOLD + line.rstrip().replace("\""+i+"\", ", "") + bcolors.ENDC)
+        if os.path.exists(logfile):
+            count = open(logfile).read().count(', line')
+            if count > 0:
+                issue = "issues"
+                if(count == 1):
+                    issue = "issue"
+                printWarn("lacheck found " + str(count) + " " + issue + ". To view, run \"lacheck " + i + "\"")
 
-    # bibcheck - commented out because it is too verbose.
-    # depend = []
-    # for i in filenames:
-    #     depend.extend(findPotentialDependencies(i))
-    # depend = dedup(depend)
-    # for d in depend:
-    #     if d.endswith(".bib"):
-    #         logfile = MLTMP+"bibcheck-"+bname(d)+".log"
-    #         runCommand("bibcheck", d + " > " + logfile, shell=True, silentFail=True)
-    #         if os.path.exists(logfile) and len(open(logfile).read()):
-    #             printWarn("bibcheck warnings for " + bname(d) + " :")
-    #             skipNextLineIfContinue=False
-    #             for line in open(logfile):
-    #                 if len(line.strip()) == 0:
-    #                     continue
-    #                 print(bcolors.BOLD + line.rstrip().replace(d+":", "line ") + bcolors.ENDC)
+    # bibcheck
+    depend = []
+    for i in filenames:
+        depend.extend(findPotentialDependencies(i))
+    depend = dedup(depend)
+    for d in depend:
+        if d.endswith(".bib"):
+            logfile = MLTMP+"bibcheck-"+bname(d)+".log"
+            runCommand("bibcheck", d + " > " + logfile, shell=True, silentFail=True)
+            if os.path.exists(logfile) and len(open(logfile).read()):
+                count = open(logfile).read().count(d+":")
+                if count > 0:
+                    issue = "issues"
+                    if(count == 1):
+                        issue = "issue"
+                    printWarn("bibcheck found " + str(count) + " " + issue + ". To view, run \"bibcheck " + bname(d) + "\"")
 
 
 
@@ -1057,6 +1058,7 @@ def printLatexWarn(basename):
                [ 0, 0, "LaTeX Error"],
                [ 0, 0, "! I can't"],
                [ 0, 0, "!pdfTeX error"],
+               [ 0, 0, "---!"],
                [ 0, 0, "Fatal"],
                [ 0, 0, "not defined"],
                [ 0, 0, "undefined"],
