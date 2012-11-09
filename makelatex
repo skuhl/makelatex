@@ -286,7 +286,6 @@ def makeSuggestions(texfiles):
 
 
 
-
 def getTexFiles():
     """Get list of tex files for us to process based on the arguments
     provided. If no arguments are provided, then we will find appropriate
@@ -404,7 +403,6 @@ def initialSetup():
         else:
             printError("latexdiff is not installed.")
             exit(1)
-
 
     # Choose method to generate pdf if no choice is made by user
     if not args.engine and len(getEnviron("MAKELATEX_ENGINE")):
@@ -576,7 +574,7 @@ def runCommand(exe, commandargs, shell=False, silentFail=False, wd=None):
             return None
         else:
             traceback.print_exc()
-            printError("File \"" + exe + "\" not found in " + path)
+            printError("File \"" + exe + "\" not found in " + getEnviron('PATH'))
             exit(1)
     # rudimentary security for running as shell=True
     if shell and commandargs.count(";"):
@@ -699,6 +697,8 @@ def getPdfStatsFilename(path):
     """Returns a dictionary structure containing information about the
     given PDF."""
     if not os.path.exists(path) or not path.endswith(".pdf"):
+        return None
+    if not findFileInPaths("pdfinfo") or not findFileInPaths("pdffonts"):
         return None
 
     # Collect information in log files to use
