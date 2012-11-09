@@ -387,8 +387,60 @@ def filesMatchingRegex(regex, dir=os.getcwd()):
 
 
 
+def initialSetupGetEngine():
+    """Sets args.engine to the name of the engine to use based on what is
+    installed or what is in args.engine originally."""
+
+    # If engine is not selected, but environment variable is set:
+    if not args.engine and len(getEnviron("MAKELATEX_ENGINE")):
+        args.engine = getEnviron('MAKELATEX_ENGINE')
+
+    # If engine is not selected, pick one based on what is installed.
+    if not args.engine:
+        if findFileInPaths("xelatex", getEnviron('PATH')):
+            args.engine = "xelatex"
+        elif fineFileInPaths("lualatex", getEnviron('PATH')):
+            args.engine = "lualatex"
+        elif findFileInPaths("pdflatex", getEnviron('PATH')):
+            args.engine = "pdflatex"
+        else: # fallback to latex
+            args.engine = "latex"
+
+    # Allowed engines and their actual values:
+    engines = { "xelatex"  : "xelatex",
+                "xetex"    : "xelatex",
+                "x"        : "xelatex",
+                "pdflatex" : "pdflatex",
+                "pdf"      : "pdflatex",
+                "latex"    : "latex",
+                "dvips"    : "latex",
+                "lua"      : "lualatex",
+                "lualatex" : "lualatex",
+                "luatex"   : "lualatex" }
+    try:
+        args.engine = engines[args.engine]
+    except KeyError:
+        printError("ERROR: Unknown engine selected: " + args.engine)
+        exit(1)
+
+    # Verify that whatever engine was selected actually exists:
+    if not findFileInPaths(args.engine):
+        printError("ERROR: The " + args.engine + " engine was selected but binary does not exist anywhere in your PATH")
+        exit(1)
+
+    if args.engine == "latex":
+        if not findFileInPaths("dvips"):
+            printError("ERROR: The dvips command is required by makelatex if you are using the latex engine. It is not anywhere in your PATH.")
+            exit(1)
+        if not findFileInPath("ps2pdf"):
+            printError("ERROR: The ps2pdf command is required by makelatex if you are using the latex engine. It is not anywhere in your PATH.")
+            exit(1)
+
+
 # Get ready to run, put tex files to compile in args.texfiles variable
 def initialSetup():
+    initialSetupGetEngine()
+
     if args.diff:
         if findFileInPaths("latexdiff"):
             # allow users to specify basename, pdf, or tex file...change it to .tex file:
@@ -403,36 +455,6 @@ def initialSetup():
         else:
             printError("latexdiff is not installed.")
             exit(1)
-
-    # Choose method to generate pdf if no choice is made by user
-    if not args.engine and len(getEnviron("MAKELATEX_ENGINE")):
-        args.engine = getEnviron('MAKELATEX_ENGINE')
-
-    if not args.engine:
-        if findFileInPaths("xelatex", getEnviron('PATH')):
-            args.engine = "xelatex"
-        elif findFileInPaths("pdflatex", getEnviron('PATH')):
-            args.engine = "pdflatex"
-        else:
-            args.engine = "latex"
-    # Note: We don't detect and use lualatex by default because there
-    # hasn't been a stable release yet.
-
-    # Allowed engines and their actual values:
-    engines = { "xelatex"  : "xelatex",
-                "xetex"    : "xelatex",
-                "x"        : "xelatex",
-                "pdflatex" : "pdflatex",
-                "latex"    : "latex",
-                "dvips"    : "latex",
-                "lua"      : "lualatex",
-                "lualatex" : "lualatex",
-                "luatex"   : "lualatex" }
-    try:
-        args.engine = engines[args.engine]
-    except KeyError:
-        printError("ERROR: Unknown engine selected: " + args.engine)
-        exit(1)
 
     if args.synctex:
         global LATEX_ARGS
@@ -534,7 +556,6 @@ def runLatex(basename, exe=None):
     if match:
         exe = match.group(1)
 
-
     if not args.quiet:
         print(outfmt % (basename, exe))
     command = exe + " " + LATEX_ARGS + " " + basename + " > " + MLTMP+"latex-"+basename+".log"
@@ -591,12 +612,13 @@ def runCommand(exe, commandargs, shell=False, silentFail=False, wd=None):
     return ps.wait()
 
 
-# Runs latex, dvips, ps2pdf
-# NOTE: Some systems have a dvipdf script which converts from dvi to pdf,
-# but this is usually just a wrapper around dvips and gs
 def runDvips(basename):
+    """Runs dvips and then ps2pdf to convert a dvi file into a pdf."""
     if args.engine != "latex":
         return True
+
+    # NOTE: Some systems have a dvipdf script which converts from dvi to pdf,
+    # but this is usually just a wrapper around dvips and gs
 
     dvi = basename+".dvi"
     ps = basename+".ps"
@@ -616,8 +638,10 @@ def runDvips(basename):
     printDvipsError(basename)
 
     if not args.quiet: print(outfmt % (basename, "ps2pdf"))
-    # automatically rotate all pages one way depending on text direction
-    # to make landscape pages work with "-e latex"
+
+    # Run ps2pdf with options that automatically rotate all pages one way
+    # depending on text direction to make landscape pages work with "-e
+    # latex"
     if not ps2pdf(PS2PDF_ARGS.replace("-dAutoRotatePages=/None",
                                       "-dAutoRotatePages=/All"),
                   ps, basename + ".pdf", optimize=False):
@@ -1615,7 +1639,7 @@ def processTexFile(path):
 
 
 def updatePdfMtime(path):
-    if not os.path.exists(path):
+    if not os.path.exists(path) or not findFileInPaths("touch"):
         return
 
     # makes the PDF mtime and atime match the time we started this script
