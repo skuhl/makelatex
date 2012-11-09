@@ -4,6 +4,7 @@ v0.95
  * makelatex now calls "./prepost.sh post-bibtex" every time that bibtex is called. This makes it possible to modify a .bbl file before before the document is created.
  * Removed --nowarn option; changed output to show number of warnings instead of the warnings themselves.
  * Better handle situation where pdffonts or pdfinfo are not installed.
+ * Clarify warning message which occurs if ps2pdf is used but pdftk is not installed.
 
 v0.94 - 12 Jun 2012
  * Use bibtex8 executable (if available) instead of bibtex

@@ -633,8 +633,8 @@ def removeIfExist(filename):
         os.remove(filename)
 
 def copyMetadata(src, dest):
-    """Copies metadata from src to destination. src PDF is unchanged and
-    dest will always exist (even if we couldn't update the metadata)."""
+    """Copies metadata from src PDF to dest PDF. Returns True if
+    successful, False if failure."""
 
     if not os.path.exists(src) or not os.path.exists(dest):
         return False
@@ -861,7 +861,7 @@ def ps2pdf(commandargs, infile, outfile, optimize=True):
         if infile.endswith(".ps"):
             return True
         if not copyMetadata(infile, outfile):
-            printWarn(outfmt % (bname(infile), "Might have incorrect metadata."))
+            printWarn(outfmt % (bname(infile), "Output PDF may have incorrect metadata. (Is pdftk installed?)"))
         if optimize:
             optimizePdf(outfile)
         os.utime(outfile, (mtime,mtime))
