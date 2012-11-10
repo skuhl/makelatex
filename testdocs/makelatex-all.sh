@@ -10,17 +10,22 @@ PATH="../..:$PATH"
 trap ctrl_c INT
 function ctrl_c() { exit; }
 
+# Disable greyscale test since we are removing the feature for now.
+# MLARGS="-q -o -f --screen --greyscale --nupHandout --nupPort 2x1"
+MLARGS="-q -o -f --screen --nupHandout --nupPort 2x1"
+
+
 for i in *; do
     if [[ -d $i ]]; then
         echo
         echo "Working in $i"
         cd $i
-        makelatex -q -o -f --screen --greyscale --nupHandout --nupPort 2x1
+	makelatex ${MLARGS}
         echo "makelatex returned status code: $?"
         echo
         echo "Working in $i using Python 3"
         # TODO: This doesn't force uconvert through Python 3.
-        python3 ../../makelatex -q -o -f --screen --greyscale --nupHandout --nupPort 2x1
+        python3 ../../makelatex ${MLARGS}
         cd ..
     fi
 done

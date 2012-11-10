@@ -65,7 +65,10 @@ PS2PDF_ARGS = " -dPDFSETTINGS=/prepress " \
 #     "-dMonoImageFilter=/FlateEncode"
 
 
+# ColorConversionStrategy option is used to hide a warning related to sRGB
+# (noticed on Ubuntu 12.10, ghostscript 9.06)
 PS2PDF_ARGS_SCREEN = " -dPDFSETTINGS=/screen " \
+    "-dColorConversionStrategy=/LeaveColorUnchanged" \
     "-dAutoRotatePages=/None " \
     "-dEmbedAllFonts=true " \
     "-dMaxSubsetPct=100 " \
@@ -73,10 +76,6 @@ PS2PDF_ARGS_SCREEN = " -dPDFSETTINGS=/screen " \
     "-dColorImageResolution=150 " \
     "-dGrayImageResolution=150 " \
     "-dMonoImageResolution=300 "
-
-PS2PDF_ARGS_GREY = PS2PDF_ARGS + " " \
-    "-sColorConversionStrategy=Gray " \
-    "-dProcessColorModel=/DeviceGray "
 
 
 lockfile = ".makelatex.lock"
@@ -169,8 +168,9 @@ parser.add_argument('--nupPort', metavar="NxN",
                     help="2x1 (2 pages per 1 portrait page, side by side); 1x2 (above/below); etc")
 parser.add_argument('--nupHandout', action="store_true",
                     help="3 pages per page with room for notes (useful for presentations)")
-parser.add_argument('--greyscale', '--grayscale', action="store_true",
-                    help="Convert output pdf to greyscale.")
+# Disable greyscale rendering, see explanation near greyscalePdf():
+# parser.add_argument('--greyscale', '--grayscale', action="store_true",
+#                    help="Convert output pdf to greyscale.")
 parser.add_argument('--screen', action="store_true",
                     help="Compress images in PDF more heavily (reduce image resolution, use lossy image compression)")
 # TODO: We should automatically trigger --nonascii if it looks as if the
@@ -902,17 +902,23 @@ def ps2pdf(commandargs, infile, outfile, fast=False):
         # If ps2pdf doesn't appear to be installed, return false:
         return False
 
-    if os.path.exists(outfile):
-        if infile.endswith(".ps"):
-            return True
+    if not os.path.exists(outfile):
+        return False
+
+    # If output file was created...
+
+    # Copy metadata from original PDF into new one:
+    if infile.endswith(".pdf"):
         if not copyMetadata(infile, outfile):
             printWarn(outfmt % (bname(infile), "Output PDF may have incorrect metadata. (Is pdftk installed?)"))
-        if not fast:
-            embedFonts(outfile)
-            linearizePdf(outfile)
-        os.utime(outfile, (mtime,mtime))
-        return True
-    return False
+
+    # Embed fonts and linearize.
+    if not fast:
+        embedFonts(outfile)
+        linearizePdf(outfile)
+
+    os.utime(outfile, (mtime,mtime))
+    return True
 
 
 def embedFonts(path):
@@ -927,7 +933,7 @@ def embedFonts(path):
         return False
 
     if not args.quiet:
-        print(outfmt % (bname(path), "ps2pdf (try to compact/subset/embed fonts)"))
+        print(outfmt % (bname(path), "Compact, subset, and embed fonts."))
 
     # We don't embed/linearize here because we will optimize later...
     mtime = os.stat(infile).st_mtime
@@ -938,17 +944,33 @@ def embedFonts(path):
 
     return False
 
+# # This method of using pdf2ps and then ps2pdf to make the file greyscale
+# # works, reduces the PDF quality significantly.
+# #
+# # We used to convert to greyscale this way:
+# # http://superuser.com/questions/318586/how-to-convert-pdf-to-grayscale
+# # But it currently does not work because of this bug:
+# # http://bugs.ghostscript.com/show_bug.cgi?id=693074
+# def greyscalePdf(infile):
+#     """Make a greyscale PDF if the user requested it. Returns true if file
+#     is successfully created."""
+#     if not args.greyscale:
+#         return True
 
-# TODO: We need to use "pdf2ps -sDEVICE=psgray nameOfPDF.pdf; ps2pdf nameOfPs.ps" instead of the method below because ps2pdf no longer does the color->gray conversion for us. See: http://bugs.ghostscript.com/show_bug.cgi?id=693074
-def greyscalePdf(infile):
-    """Make a greyscale PDF if the user requested it. Returns true if file
-    is successfully created."""
-    if not args.greyscale:
-        return True
+#     mtime = os.stat(infile).st_mtime
+#     outfile = stripPdfEnding(infile) + ".grey.pdf"
+#     psfile = stripPdfEnding(infile) + ".grey.ps"
+#     if not args.quiet: print(outfmt % (bname(infile), "Converting to greyscale."))
 
-    outfile = stripPdfEnding(infile) + ".grey.pdf"
-    if not args.quiet: print(outfmt % (bname(infile), "ps2pdf (convert to greyscale)"))
-    return ps2pdf(PS2PDF_ARGS_GREY, infile, outfile, fast=False)
+#     runCommand("pdf2ps", [ "-sDEVICE=psgray", infile, psfile ], shell=False, silentFail=False)
+#     ps2pdf(PS2PDF_ARGS, psfile, outfile, fast=False)
+#     removeIfExist(psfile)
+
+
+#     if os.path.exists(outfile):
+#         os.utime(outfile, (mtime,mtime))
+#         return True
+#     return False
 
 def screenPdf(infile):
     """Make a screen-quality PDF if the user requested it. Returns true if file
@@ -957,7 +979,7 @@ def screenPdf(infile):
         return
 
     outfile = stripPdfEnding(infile) + ".screen.pdf"
-    if not args.quiet: print(outfmt % (bname(infile), "ps2pdf (for screen-quality)"))
+    if not args.quiet: print(outfmt % (bname(infile), "Creating screen-quality output."))
     if ps2pdf(PS2PDF_ARGS_SCREEN, infile, outfile, fast=False):
         # If we created a file that is larger than the original, 
         # forget about using it...
@@ -982,7 +1004,7 @@ def linearizePdf(path):
 
     for o in options:
         if findFileInPaths(o[0]):
-            if not args.quiet: print(outfmt % (bname(path), o[0] + " linearized the PDF"))
+            if not args.quiet: print(outfmt % (bname(path), "Optimize/linearize the PDF."))
             mtime = os.stat(orig).st_mtime
             runCommand(o[0], o[1], shell=False, silentFail=True)
             if os.path.exists(opt):
@@ -1785,7 +1807,7 @@ def processTexFiles():
         pdffilelist = list(map(texToPdf, texfilelist))
         callFunctionWithThreads(embedFonts, pdffilelist)
         callFunctionWithThreads(linearizePdf, pdffilelist)
-        callFunctionWithThreads(greyscalePdf, pdffilelist)
+#        callFunctionWithThreads(greyscalePdf, pdffilelist)
         callFunctionWithThreads(screenPdf, pdffilelist)
         callFunctionWithThreads(createNup, pdffilelist)
 
