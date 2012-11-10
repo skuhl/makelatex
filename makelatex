@@ -939,6 +939,7 @@ def embedFonts(path):
     return False
 
 
+# TODO: We need to use "pdf2ps -sDEVICE=psgray nameOfPDF.pdf; ps2pdf nameOfPs.ps" instead of the method below because ps2pdf no longer does the color->gray conversion for us. See: http://bugs.ghostscript.com/show_bug.cgi?id=693074
 def greyscalePdf(infile):
     """Make a greyscale PDF if the user requested it. Returns true if file
     is successfully created."""
