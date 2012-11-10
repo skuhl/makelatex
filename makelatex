@@ -37,12 +37,15 @@ PDFNUP_PAPER = "letterpaper"
 # http://pages.cs.wisc.edu/~ghost/doc/cvs/Ps2pdf.htm
 # http://ghostscript.com/doc/current/Ps2pdf.htm
 # -dPDFA = creates PDF/A documents
-# Try to embed all fonts. Use lossless image compression. Don't downsample images.
-#PS2PDF_ARGS = "-dPDFSETTINGS=/prepress -dAutoRotatePages=/None -dEmbedAllFonts=true -dMaxSubsetPct=100 -dSubsetFonts=true -dAutoFilterColorImages=false -dAutoFilterGrayImages=false -dColorImageFilter=/FlateEncode -dGrayImageFilter=/FlateEncode -dMonoImageFilter=/FlateEncode -dDownsampleColorImages=false -dDownsampleGrayImages=false -dDownsampleMonoImages=false"
 
-# Same as above, but we don't insist on lossless images. For example,
-# lualatex will encode lossy images JPEG images---and then running the
-# resulting PDF through ps2pdf would then produce a much larger PDF:
+# The following arguments do not request lossless compression (which would
+# produce higher quality, larger files). The reason for this decision is
+# that lualatex will encode lossy JPEG images---and then running the
+# resulting PDF through ps2pdf would produce a much larger PDF:
+
+# For example, lualatex will encode
+# lossy images JPEG images---and then running the resulting PDF through
+# ps2pdf would then produce a much larger PDF:
 PS2PDF_ARGS = " -dPDFSETTINGS=/prepress " \
     "-dAutoRotatePages=/None " \
     "-dEmbedAllFonts=true " \
@@ -53,6 +56,14 @@ PS2PDF_ARGS = " -dPDFSETTINGS=/prepress " \
     "-dDownsampleColorImages=false " \
     "-dDownsampleGrayImages=false " \
     "-dDownsampleMonoImages=false "
+
+## The following will force lossless image encoding (even if the input to
+## PS2PDF is already using lossy encoding).
+# PS2PDF_ARGS = PS2PDF_ARGS \
+#     "-dColorImageFilter=/FlateEncode" \
+#     "-dGrayImageFilter=/FlateEncode" \
+#     "-dMonoImageFilter=/FlateEncode"
+
 
 PS2PDF_ARGS_SCREEN = " -dPDFSETTINGS=/screen " \
     "-dAutoRotatePages=/None " \
@@ -77,6 +88,13 @@ tmpUconvertDir = MLTMP + "uconvert"
 requestedOptimize = False
 
 makelatex_start_time = time.time()
+
+
+
+# TODO: pdfsizeopt.py has all sorts of useful/interesting information about
+# generating smaller PDFs.  We currently don't use any of it mostly because
+# it seems to have many dependencies that aren't commonly installed on
+# machines.
 
 
 
@@ -114,7 +132,7 @@ parser.add_argument('texfiles', metavar='X.tex', type=str, nargs='*',
 parser.add_argument('-f', '--force', action="store_true",
                     help='Recreate pdf even if one already exists')
 parser.add_argument('-o', '--optimize',  action="store_true",
-                    help='Try to PDFs smaller with ps2pdf and linearize PDF with pdfopt')
+                    help='Linearize PDF with qpdf or pdfopt')
 
 # TODO: Threading is disabled by default since there we sometimes have one
 # thread hang on a subprocess.call() which causes us to hang. Once
@@ -399,7 +417,7 @@ def initialSetupGetEngine():
     if not args.engine:
         if findFileInPaths("xelatex", getEnviron('PATH')):
             args.engine = "xelatex"
-        elif fineFileInPaths("lualatex", getEnviron('PATH')):
+        elif findFileInPaths("lualatex", getEnviron('PATH')):
             args.engine = "lualatex"
         elif findFileInPaths("pdflatex", getEnviron('PATH')):
             args.engine = "pdflatex"
@@ -425,15 +443,15 @@ def initialSetupGetEngine():
 
     # Verify that whatever engine was selected actually exists:
     if not findFileInPaths(args.engine):
-        printError("ERROR: The " + args.engine + " engine was selected but binary does not exist anywhere in your PATH")
+        printError("ERROR: The " + args.engine + " engine was selected but binary does not exist in your PATH")
         exit(1)
 
     if args.engine == "latex":
         if not findFileInPaths("dvips"):
-            printError("ERROR: The dvips command is required by makelatex if you are using the latex engine. It is not anywhere in your PATH.")
+            printError("ERROR: The dvips command is required by makelatex if you are using the latex engine. It was not found in your PATH.")
             exit(1)
-        if not findFileInPath("ps2pdf"):
-            printError("ERROR: The ps2pdf command is required by makelatex if you are using the latex engine. It is not anywhere in your PATH.")
+        if not findFileInPaths("ps2pdf"):
+            printError("ERROR: The ps2pdf command is required by makelatex if you are using the latex engine. It was not found in your PATH.")
             exit(1)
 
 
@@ -644,7 +662,7 @@ def runDvips(basename):
     # latex"
     if not ps2pdf(PS2PDF_ARGS.replace("-dAutoRotatePages=/None",
                                       "-dAutoRotatePages=/All"),
-                  ps, basename + ".pdf", optimize=False):
+                  ps, basename + ".pdf", fast=True):
         printError("ERROR: Could not create PDF (is ps2pdf in PATH?).")
         return False
     removeIfExist(ps)
@@ -717,7 +735,7 @@ def cleanupEverything(texfiles=[]):
         for e in extlist.split():
             removeIfExist(basename+e)
 
-def getPdfStatsFilename(path):
+def getPdfStats(path):
     """Returns a dictionary structure containing information about the
     given PDF."""
     if not os.path.exists(path) or not path.endswith(".pdf"):
@@ -785,8 +803,9 @@ def getPdfStatsFilename(path):
     #
     # We are concerned with two different fonts:
     #
-    # Type 3 - Usually bitmapped if they are coming out of LaTeX (Type 3
-    # doesn't stictly mean bitmapped, however)
+    # Type 3 - Usually bitmapped if they are coming out of LaTeX. Type 3
+    # doesn't stictly mean bitmapped as described in the following URL:
+    # http://tex.stackexchange.com/questions/18712/why-call-type-3-font-bitmap
     #
     # Type 1 - It is better to use a compact format, Type 1C
 
@@ -852,23 +871,25 @@ def printPdfStats(stats):
 def printPdfStatsPath(path):
     extlist = ".pdf .grey.pdf .screen.pdf .handout.pdf .2x1.pdf .1x2.pdf .3x1.pdf .1x3.pdf .2x2.pdf .3x2.pdf .2x3.pdf"
     for e in extlist.split():
-        stats = getPdfStatsFilename(stripPdfEnding(path)+e)
+        stats = getPdfStats(stripPdfEnding(path)+e)
         printPdfStats(stats)
 
 
 
 def humanSize(num):
+    """Given a number of bytes, returns a human-readable string
+    representing the file size."""
     for x in ['bytes','KiB','MiB','GiB','TiB']:
         if num < 1024.0:
             return "%d%s" % (round(num), x)
         num /= 1024.0
 
 
-# calls ps2pdf, manages mtime properly, copies metadata from original file
+# Calls ps2pdf, manages mtime properly, copies metadata from original file
 # to new one. Returns true if outFile is created. Prints warning if
-# metadata is not copied. If optimize=True, we will try to optimize the PDF
-# after we have run the given ps2pdf command.
-def ps2pdf(commandargs, infile, outfile, optimize=True):
+# metadata is not copied. If fast=False, we will try to embed fonts and
+# linearize the PDF.
+def ps2pdf(commandargs, infile, outfile, fast=False):
     if not os.path.exists(infile):
         return False
 
@@ -886,59 +907,57 @@ def ps2pdf(commandargs, infile, outfile, optimize=True):
             return True
         if not copyMetadata(infile, outfile):
             printWarn(outfmt % (bname(infile), "Output PDF may have incorrect metadata. (Is pdftk installed?)"))
-        if optimize:
-            optimizePdf(outfile)
+        if not fast:
+            embedFonts(outfile)
+            linearizePdf(outfile)
         os.utime(outfile, (mtime,mtime))
         return True
     return False
 
 
-# Rebuild PDF if any of the following is true:
-#  * It has non-compact Type 1 fonts
-#  * Fonts that are not subsetted
-#  * Fonts are not embedded
-#
-# This runs the fonts through ps2pdf to create a PDF. Returns true
-# if new PDF is created. New PDF is saved on top of the original.
-def fixFonts(path):
+def embedFonts(path):
+    """Rebuild a PDF if it contains non-compact Type 1 fonts, fonts that
+    are not subsetted, or fonts that are not embedded using ps2pdf. Output
+    PDF is saved on top of the original."""
     infile = path
     outfile = stripPdfEnding(path) + ".tmp.pdf"
 
-    stats = getPdfStatsFilename(infile)
+    stats = getPdfStats(infile)
     if not stats or (stats['nonCompactFonts'] == 0 and stats['nonSubsettedFonts'] == 0 and stats['unembeddedFonts']==0):
         return False
-# print stats before ps2pdf:
-#    printPdfStats(stats)
 
-    if not args.quiet: print(outfmt % (bname(path), "ps2pdf (try to compact/subset/embed fonts)"))
-    # This process happens before optimization, so the file will get
-    # subsequently optimized even with optimize=False
-    if ps2pdf(PS2PDF_ARGS, infile, outfile, optimize=False):
+    if not args.quiet:
+        print(outfmt % (bname(path), "ps2pdf (try to compact/subset/embed fonts)"))
+
+    # We don't embed/linearize here because we will optimize later...
+    mtime = os.stat(infile).st_mtime
+    if ps2pdf(PS2PDF_ARGS, infile, outfile, fast=True):
         shutil.move(outfile, infile)
+        os.utime(infile, (mtime,mtime))
         return True
+
     return False
 
 
-
-# Make a greyscale PDF if the user requested it. Returns true if file is
-# successfully created.
 def greyscalePdf(infile):
+    """Make a greyscale PDF if the user requested it. Returns true if file
+    is successfully created."""
     if not args.greyscale:
         return True
 
     outfile = stripPdfEnding(infile) + ".grey.pdf"
     if not args.quiet: print(outfmt % (bname(infile), "ps2pdf (convert to greyscale)"))
-    return ps2pdf(PS2PDF_ARGS_GREY, infile, outfile, optimize=True)
+    return ps2pdf(PS2PDF_ARGS_GREY, infile, outfile, fast=False)
 
-#  Make a screen-quality PDF if the user requested it. Returns true if file
-#  is successfully created.
 def screenPdf(infile):
+    """Make a screen-quality PDF if the user requested it. Returns true if file
+    is successfully created."""
     if not args.screen:
         return
 
     outfile = stripPdfEnding(infile) + ".screen.pdf"
     if not args.quiet: print(outfmt % (bname(infile), "ps2pdf (for screen-quality)"))
-    if ps2pdf(PS2PDF_ARGS_SCREEN, infile, outfile, optimize=True):
+    if ps2pdf(PS2PDF_ARGS_SCREEN, infile, outfile, fast=False):
         # If we created a file that is larger than the original, 
         # forget about using it...
         if os.stat(infile).st_size < os.stat(outfile).st_size:
@@ -948,36 +967,13 @@ def screenPdf(infile):
 
 
 
-# TODO: pdfsizeopt.py has all sorts of useful/interesting information about
-# generating smaller PDFs.  We currently don't use any of it mostly because
-# it seems to have many dependencies that aren't commonly installed on
-# machines.
-def optimizePdf(pdf):
-    if not os.path.exists(pdf):
-        return
-
-    # Always try to embed/compact/subset fonts, regardless
-    # of if optimize flag is set:
-    mtime = os.stat(pdf).st_mtime
-    fixFonts(pdf)
-    os.utime(pdf, (mtime,mtime))
-
-    if not args.optimize:
-        return
-
-    # Linearize the PDF
-    mtime = os.stat(pdf).st_mtime
-    optimizePdfopt(pdf)
-    os.utime(pdf, (mtime,mtime))
-
-
-
-# Linearizes a PDF using pdfopt command. Silently fails.
-def optimizePdfopt(path):
+def linearizePdf(path):
+    """Linearizes the PDF with qpdf or pdfopt. Linearizion allows people to
+    view the PDF before it is completely downloaded."""
     orig = path
     opt = MLTMP + bname(path) + ".opt.pdf"
 
-    if getPdfStatsFilename(orig)['linear']:
+    if not args.optimize or getPdfStats(orig)['linear']:
         return
     # a list of [ command, args ] for programs which linearize PDFs:
     options = [ [ "qpdf", [ "--linearize", orig, opt ] ],
@@ -986,15 +982,16 @@ def optimizePdfopt(path):
     for o in options:
         if findFileInPaths(o[0]):
             if not args.quiet: print(outfmt % (bname(path), o[0] + " linearized the PDF"))
+            mtime = os.stat(orig).st_mtime
             runCommand(o[0], o[1], shell=False, silentFail=True)
             if os.path.exists(opt):
                 shutil.move(opt, orig)
+                os.utime(orig, (mtime,mtime))
             return
 
-
-# Runs makeindex if necessary. Returns True/False depending on if we had to
-# run makeindex, exits on error.
 def runMakeindex(basename):
+    """Runs makeindex if needed. Returns True or False depending on if we
+    had to run makeindex. Calls exit() when there is an error."""
 
     # a list of [ exten, command, args ]. Runs command+args when
     # basename.exen is present.
@@ -1013,9 +1010,10 @@ def runMakeindex(basename):
 
 
 
-# Runs makeglossaries if necessary. Returns True/False depending on if we had to
-# run makeglossaries, exits on error.
 def runMakeglossaries(basename):
+    """Runs makeglossaries if needed. Returns True or False depending on if we
+    had to run makeglossaries. Calls exit() when there is an error."""
+
     if not os.path.exists(MLTMP + basename + ".glo"):
         return False
 
@@ -1027,9 +1025,10 @@ def runMakeglossaries(basename):
 
     return True
 
-# Runs bibtex if necessary. Returns True/False depending on if we had to
-# run bibtex, exits on error.
 def runBibtex(basename):
+    """Runs bibtex if needed. Returns True or False depending on if we
+    had to run bibtex. Calls exit() when there is an error."""
+
     bibtexargs = findMatches( [ "^No file (.*)\.bbl" ], MLTMP+basename+".log")
     if len(bibtexargs) == 0:
         return False
@@ -1057,8 +1056,8 @@ def runBibtex(basename):
     return True
 
 
-# Print latex warnings and errors
 def printLatexWarn(basename):
+    """Prints LaTeX warnings and errors to the console."""
 
     if os.path.exists(MLTMP+basename+".log"):
         with open(MLTMP+basename+".log") as f:
@@ -1173,8 +1172,8 @@ def needsRerun(basename, printMessages=False):
     return False
 
 
-# Removes duplicates in list
 def dedup(listin):
+    """Removes duplicates in list."""
     out = []
     for i in listin:
         if out.count(i) == 0:
@@ -1515,7 +1514,9 @@ def convertImages(texfiles):
     if args.quiet:
         commandargs = [ "-q" ]
     commandargs.extend(dedup(imageWithExten))
-    if runCommand("uconvert", commandargs, shell=False) != 0:
+    if not findFileInPaths("uconvert"):
+        printWarn("WARNING: uconvert command is needed by makelatex to convert images.")
+    if runCommand("uconvert", commandargs, shell=False, silentFail=False) != 0:
         printWarn("WARNING: Failed to convert one or more images.")
 
 # paramName = actual parameter provided to makelatex
@@ -1535,7 +1536,7 @@ def createNupCommand(paramName, paramValue, command, otherCommandArgs, path, ext
     commandargs.extend(PDFNUP_ARGS.split())
     commandargs.extend(otherCommandArgs)
     # use same paper size as input PDF if it is letter or A4
-    pageSize = getPdfStatsFilename(path)['pageSize']
+    pageSize = getPdfStats(path)['pageSize']
     if pageSize == "letter paper":
         commandargs.extend(["--paper", "letterpaper"])
     elif pageSize == "A4 paper":
@@ -1546,7 +1547,8 @@ def createNupCommand(paramName, paramValue, command, otherCommandArgs, path, ext
     if not args.quiet: print(outfmt % (bname(path), "pdfnup"))
     runCommand(command, commandargs, shell=False)
 
-    optimizePdf(outfile)
+    embedFonts(outfile)
+    linearizePdf(outfile)
 
 
 def createNupHandout(path):
@@ -1780,7 +1782,8 @@ def processTexFiles():
     texfilelist = getTexFiles()
     if len(texfilelist) > 0:
         pdffilelist = list(map(texToPdf, texfilelist))
-        callFunctionWithThreads(optimizePdf, pdffilelist)
+        callFunctionWithThreads(embedFonts, pdffilelist)
+        callFunctionWithThreads(linearizePdf, pdffilelist)
         callFunctionWithThreads(greyscalePdf, pdffilelist)
         callFunctionWithThreads(screenPdf, pdffilelist)
         callFunctionWithThreads(createNup, pdffilelist)
