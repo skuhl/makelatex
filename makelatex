@@ -573,6 +573,9 @@ def runLatex(basename, exe=None):
     match = re.search("%\s!TEX\s*program\s*=\s*(.*)",line)
     if match:
         exe = match.group(1)
+        if not findFileInPaths(exe):
+            printError("A !TEX directive told us to use the " + exe + " engine---but it is not in your PATH.")
+            exit(1)
 
     if not args.quiet:
         print(outfmt % (basename, exe))
@@ -996,7 +999,12 @@ def linearizePdf(path):
     orig = path
     opt = MLTMP + bname(path) + ".opt.pdf"
 
-    if not args.optimize or getPdfStats(orig)['linear']:
+    if not findFileInPaths("qpdf") and not findFileInPaths("pdfopt"):
+        printWarn("qpdf or pdfopt commands are necessary for PDF linearization.")
+        return
+
+    pdfstats = getPdfStats(orig)
+    if not args.optimize or not pdfstats or pdfstats['linear']:
         return
     # a list of [ command, args ] for programs which linearize PDFs:
     options = [ [ "qpdf", [ "--linearize", orig, opt ] ],
@@ -1022,9 +1030,14 @@ def runMakeindex(basename):
                 # nomencl.sty:
                 [ ".nlo", "makeindex", [ "-q", "-t", MLTMP+"makeindex-"+basename+".log", MLTMP + basename + ".nlo", "-s", "nomencl.ist", "-o", MLTMP + basename + ".nls" ] ] ]
 
+
     for o in options:
         if os.path.exists(MLTMP + basename + o[0]):
-            if not args.quiet: print(outfmt % (basename, o[1]))
+            if not args.quiet:
+                print(outfmt % (basename, o[1]))
+            if not findFileInPaths("makeindex"):
+                printWarn("makeindex is not in PATH, index may be incorrect.")
+                return False
             if runCommand(o[1], o[2], shell=False, silentFail=False) != 0:
                 print(open(MLTMP + o[1]+basename+".log").read())
                 exit(1)
@@ -1039,6 +1052,11 @@ def runMakeglossaries(basename):
 
     if not os.path.exists(MLTMP + basename + ".glo"):
         return False
+
+    if not findFileInPaths("makeglossaries"):
+        printWarn("makeglossaries is not in PATH, glossary may be incorrect.")
+        return False
+
 
     if not args.quiet: print(outfmt % (basename, "makeglossaries"))
 
@@ -1059,6 +1077,9 @@ def runBibtex(basename):
     exe = findFileInPaths("bibtex8")
     if not exe:
         exe = "bibtex"
+    if not findFileInPaths(exe):
+        printWarn("bibtex command is not in PATH, bibliography may be incorrect.")
+        return False
 
     for basename in bibtexargs:
         if not args.quiet: print(outfmt % (basename, bname(exe)))
