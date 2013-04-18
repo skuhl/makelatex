@@ -258,8 +258,8 @@ def makeSuggestions(texfiles):
         removeIfExist(logfile)
         runCommand("style", fileOnly(i) + " > " + logfile, shell=True, silentFail=True)
 
-    # chktex
     for i in filenames:
+        # chktex
         i = bname(i)
         logfile = MLTMP+"chktex-"+i+".log"
         removeIfExist(logfile)
@@ -270,11 +270,9 @@ def makeSuggestions(texfiles):
                 issue = "issues"
                 if(count == 1):
                     issue = "issue"
-                printWarn("chktex found " + str(count) + " " + issue + ". To view, run \"chktex " + i + "\"")
+                printWarn(outfmt % (i, "chktex found " + str(count) + " " + issue + ". Run \"chktex " + i + "\""))
 
-    # lacheck
-    for i in filenames:
-        i = bname(i)
+        # lacheck
         logfile = MLTMP+"lacheck-"+i+".log"
         runCommand("lacheck", i + " > " + logfile, shell=True, silentFail=True)
         if os.path.exists(logfile):
@@ -283,7 +281,7 @@ def makeSuggestions(texfiles):
                 issue = "issues"
                 if(count == 1):
                     issue = "issue"
-                printWarn("lacheck found " + str(count) + " " + issue + ". To view, run \"lacheck " + i + "\"")
+                printWarn(outfmt % (i, "lacheck found " + str(count) + " " + issue + ". Run \"lacheck " + i + "\""))
 
     # bibcheck
     depend = []
