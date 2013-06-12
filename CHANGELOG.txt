@@ -6,6 +6,7 @@ v0.95
  * Better handle situation where pdffonts or pdfinfo are not installed.
  * Increase the number of checks we do to see if commands are installed before we try to use them.
  * Remove greyscale option due to ghostscript bug #693074
+ * Stop running if lockfile disappears.
 
 v0.94 - 12 Jun 2012
  * Use bibtex8 executable (if available) instead of bibtex

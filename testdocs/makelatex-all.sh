@@ -15,14 +15,14 @@ if (( 0 )); then
     # Needed to run:
     ln -s /usr/bin/python temp-bin
     ln -s /usr/bin/python3 temp-bin
-    # used by other scripts (makeglossaries, etc)
+    # Binaries used by other scripts (makeglossaries, etc)
     ln -s /usr/bin/dirname temp-bin
     ln -s /usr/bin/rm temp-bin
     ln -s /usr/bin/perl temp-bin
     ln -s /usr/bin/bash temp-bin
     ln -s /usr/bin/env temp-bin
 
-    # Used by makelatex in some way
+    # Binaries used by makelatex makelatex:
     ln -s /usr/bin/touch temp-bin
 
     ln -s /usr/bin/latex temp-bin
@@ -53,19 +53,19 @@ MLARGS="-o -f --screen --nupHandout --nupPort 2x1"
 
 
 for i in `ls | grep -v temp-bin`; do
-    if [[ -d $i ]]; then
-        echo
-        echo "Working in $i"
-        cd $i
-	makelatex ${MLARGS}
-        echo "makelatex returned status code: $?"
-        echo
-        echo "Working in $i using Python 3"
-        # TODO: This doesn't force uconvert through Python 3.
-       python3 ../../makelatex ${MLARGS}
+	if [[ -d $i ]]; then
+		echo
+		echo "Working in $i"
+		cd $i
+		makelatex ${MLARGS}
+		echo "makelatex returned status code: $?"
+		echo
+		echo "Working in $i using Python 3"
+		# TODO: This doesn't force uconvert through Python 3.
+		python3 ../../makelatex ${MLARGS}
         cd ..
     fi
 done
 
 
-echo "All of these tests function correctly on a Ubuntu 12.04 with texlive-backports (2012) installed. If you see an error, it could be a bug or it could be a missing package/font on your machine."
+echo "All of these tests function correctly on a Ubuntu 13.04 with texlive. If you see an error, it could be a bug or it could be a missing package/font on your machine."

@@ -148,7 +148,7 @@ parser.add_argument('-k', '--keep', action="store_true",
 parser.add_argument('-c', '--clean', action="store_true",
                     help='Just cleanup, don\'t build tex files')
 parser.add_argument('-e', '--engine',
-                    help="latex (uses dvips and ps2pdf), pdflatex, xelatex, or lualatex. You can also set this with the MAKELATEX_ENGINE environment variable.")
+                    help="latex (uses dvips and ps2pdf), pdflatex, xelatex, or lualatex. You can also set this with the MAKELATEX_ENGINE environment variable or with a '%!TEX program=enginename' in the first line of your latex file.")
 # Default to synctex ON
 #parser.add_argument('-s', '--synctex', action="store_false",
 #                    help="Use synctex (your editor must support it)")
@@ -568,7 +568,7 @@ def runLatex(basename, exe=None):
     if not exe:
         exe = args.engine
     line = open(basename+".tex").readline()
-    match = re.search("%\s!TEX\s*program\s*=\s*(.*)",line)
+    match = re.search(r"%\s*!TEX\s+program\s*=\s*(.*)",line)
     if match:
         exe = match.group(1)
         if not findFileInPaths(exe):
@@ -992,7 +992,7 @@ def screenPdf(infile):
 
 
 def linearizePdf(path):
-    """Linearizes the PDF with qpdf or pdfopt. Linearizion allows people to
+    """Linearizes the PDF with qpdf or pdfopt. Linearization allows people to
     view the PDF before it is completely downloaded."""
     orig = path
     opt = MLTMP + bname(path) + ".opt.pdf"
@@ -1877,9 +1877,11 @@ def main():
             exit(0)
 
         if args.loop:
-            while True:
+            # Loop forever, or until someone deletes our lockfile
+            while os.path.exists(lockfile):
                 processTexFiles()
                 time.sleep(1)
+            print("makelatex: Lockfile disappeared, exiting...");
 
         else:
             processTexFiles()
