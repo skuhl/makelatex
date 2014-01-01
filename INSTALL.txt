@@ -1,18 +1,15 @@
 INSTALLATION INSTRUCTIONS:
- * Place "uconvert" and "makelatex" into a directory that is in your PATH. Make them executable.
+ * Place "makelatex" into a directory that is in your PATH. Make it executable (i.e., "chmod a+x makelatex").
 
- * Place uconvert.conf in any of the following locations:
-   $HOME/.uconvert.conf
-   $HOME/.config/uconvert/uconvert.conf
-   /etc/uconvert.conf
-
+If you run makelatex and get an error message "ImportError: No module named argparse" then you need to download the following file to the same location as you downloaded makelatex (but it does not need to be made executable): <a href="http://argparse.googlecode.com/svn/trunk/argparse.py">argparse.py</a>
+ 
 
 REQUIREMENTS:
  * Supported platforms:
      * Ubuntu (well tested)
      * Linux (should work without problems)
      * Mac (unknown, no reason it shouldn't work)
- * Python 2.7 or higher (or, 2.6+argparse library)
+ * Python 2.7 or higher
  * latex+dvips or pdflatex or xelatex or lualatex
  * ps2pdf (from Ghostscript)
  * pdffonts, pdfinfo (from poppler-utils)
