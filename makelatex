@@ -99,6 +99,10 @@ class makelatexUtil:
         else:
             return filename.rsplit('.', 1)[0]
     @staticmethod
+    def changeExten(filename, orig, new):
+        """Remove extension orig (if it exists) on filename and adds extension new."""
+        return makelatexUtil.stripExten(filename,orig)+new
+    @staticmethod
     def removeIfExist(filename):
         """Removes a file if it exists."""
         if os.path.exists(filename):
@@ -157,17 +161,11 @@ class makelatexUtil:
 
 import string, subprocess, os, sys, shutil, time
 class uconvert:
-    """A class that supports universal conversion between different file types"""
+    """A class that supports universal conversion between different file types."""
 
-    # This program attempts to create the requested files using a variety of
-    # conversions hardcoded in the processfiles() function.
-    #
-    # EXAMPLE: If you have image.svg, and you would like to convert the image
-    # into a PNG file, simply request a PNG file with: "uconvert image.png"
-    #
-    # SECURITY: Any command processFile() could be run by
-    # uconvert. You should make sure trust anyone who has access to
-    # write to it.
+    # This program attempts to create the requested files using a
+    # variety of conversions rules (i.e., programs to run) hardcoded
+    # in the processfiles() function.
     VERBOSE=1
     DEST_DIR=""  # Where should the files that we create go?
     SRC_DIR=""   # Where should we look for source files to create our converted file from?
@@ -401,22 +399,22 @@ class uconvert:
         return True
 
     def __init__(self, verbose=1, srcdir=None, destdir=None):
-        # Verbose argument:
-        # 0 = only errors
-        # 1 = errors and warnings
-        # 2 = information, errors, warnings and no-ups
-        # 3 = everything
+        """Create a uconvert object.
+
+        verbose: 0=only errors; 1=error+warn; 2=more info; 3=everything
+        srcdir: colon-sepeated list of paths to look for source material to convert from.
+        destdir: path where converted files are saved."""
         self.VERBOSE=verbose
         self.DEST_DIR=destdir
         self.SRC_DIR=srcdir
 
         if self.DEST_DIR and len(self.DEST_DIR) != 0:
             if self.VERBOSE >= 2:
-                print("Putting output files in: " + self.DEST_DIR)
+                print("uconvert: Putting output files in: " + self.DEST_DIR)
         else:
             self.DEST_DIR="."
             if self.VERBOSE >= 2:
-                print("Putting output files in current directory.")
+                print("uconvert: Putting output files in current directory.")
 
         if self.SRC_DIR and len(self.SRC_DIR) != 0:
             self.SRC_DIR = str.split(self.SRC_DIR,  ":")
@@ -559,8 +557,6 @@ class makelatex:
             print("delete " + self.lockfile + " and try again.")
             exit(1)
 
-#        return args
-
 
     def parseArguments(self, inputArgs=None):
         if inputArgs==None:
@@ -618,22 +614,18 @@ class makelatex:
         #                    help="Convert output pdf to greyscale.")
         parser.add_argument('--screen', action="store_true",
                             help="Compress images in PDF more heavily (reduce image resolution, use lossy image compression)")
-        # TODO: We should automatically trigger --nonascii if it looks as if the
-        # user really did want to use UTF8 (or some other encoding) in their files.
         parser.add_argument('--nonascii', action="store_true",
-                            help="Don't warn about non-ASCII characters in tex files.")
+                            help="Warn about non-ASCII characters in tex files.")
         parser.add_argument('--quiet', '-q', action="store_true",
                             help="Turns on --nonascii. Also hides other output except for warnings/errors and PDF statistics.")
         parser.add_argument('--diff', nargs=2, metavar=('old.tex', 'new.tex'),
                             help="Generates a PDF showing differences between two versions of a document (requires latexdiff command).")
 
         self.args = parser.parse_args()
+        # LuaTex and XeLaTeX should be able to handle Unicode characters fine.
+        if self.args.engine == "pdflatex" or self.args.engine == "latex":
+            self.args.nonascii = True
 
-
-
-    def texToPdf(self, path):
-        """Strips a .tex ending and adds a .pdf ending"""
-        return makelatexUtil.stripExten(path,".tex")+".pdf"
 
 
     def makeSuggestions(self, texfiles):
@@ -838,7 +830,7 @@ class makelatex:
     # Returns true if an update is forced or if the PDF file is older than one
     # (or more) files that it depends on.
     def isUpdateNeeded(self, tex):
-        pdf = self.texToPdf(tex)
+        pdf = makelatexUtil.changeExten(tex, ".tex", ".pdf")
 
         if self.args.force or not os.path.exists(pdf):
             return True
@@ -954,7 +946,7 @@ class makelatex:
         ps = basename+".ps"
 
         if not os.path.exists(dvi):
-            print("Can't run dvips because .dvi file doesn't exist.")
+            makelatexUtil.printError("ERROR: Can't run dvips because .dvi file doesn't exist.")
             return
 
         if not self.args.quiet:
@@ -1975,7 +1967,7 @@ class makelatex:
     def findNonAsciiChars(self, files):
         """Given a list of files, print out lines which contain non-ASCII
         characters"""
-        if self.args.nonascii or self.args.quiet:
+        if self.args.nonascii == False or self.args.quiet:
             return
 
         # Find sty and bib files that the tex files use:
@@ -2077,7 +2069,9 @@ class makelatex:
         # updating.
         texfilelist = self.getTexFiles()
         if len(texfilelist) > 0:
-            pdffilelist = list(map(self.texToPdf, texfilelist))
+            pdffilelist = []
+            for f in texfilelist:
+                pdffilelist.append(makelatexUtil.changeExten(f, ".tex", ".pdf"))
             self.callFunctionWithThreads(self.embedFonts, pdffilelist)
             self.callFunctionWithThreads(self.linearizePdf, pdffilelist)
     #        self.callFunctionWithThreads(self.greyscalePdf, pdffilelist)
@@ -2090,7 +2084,7 @@ class makelatex:
         # the loop.
         for i in texfilelist:
             if not self.args.loop or (self.args.loop and len(triedToBuild) > 0):
-                self.printPdfStatsPath(self.texToPdf(i))
+                self.printPdfStatsPath(makelatexUtil.changeExten(i, ".tex", ".pdf"))
 
         self.runPrePost("post")
 
