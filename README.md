@@ -28,3 +28,35 @@ makelatex has a large collection of useful features:
  * *Synctex support:* Synctex support can be enabled with the <i>-s</i> argument.
  * *Supports lint-style programs:* makelatex can run <a href="http://www.ctan.org/tex-archive/support/lacheck">lacheck</a> and <a href="http://baruch.ev-en.org/proj/chktex/">chktex</a> if they are installed to make suggestions.
 
+Example usage
+-------------
+
+
+The following shows a very simple example of how makelatex works (see <a href="https://github.com/skuhl/makelatex/tree/master/testdocs">testdocs</a> directory for more examples!):
+
+<pre>
+testdocs/imagebib$ makelatex 
+uconvert: subdir/angle-of-decl.pdf (5KiB) <-- subdir/angle-of-decl.svg (20KiB) using inkscape
+             example: xelatex
+             example: bibtex8
+example: Warning--empty author and editor in chicago
+             example: xelatex
+             example: xelatex
+example: Overfull \hbox (215.2359pt too wide) in paragraph at lines 11--14
+             example:  1 pg;   76KiB; letter paper; PDFv1.5
+</pre>
+
+
+Similar programs
+---------------------
+
+If makelatex isn't right for you, you may be interested one of the following alternatives:
+
+ * <a href="http://www.phys.psu.edu/~collins/software/latexmk-jcc/">latexmk</a> - Perl
+ * <a href="https://launchpad.net/rubber">rubber</a> - Python
+ * <a href="http://code.google.com/p/latex-makefile/">latex-makefile</a> - GNU Makefile
+ * <a href="http://www.acoustics.hut.fi/u/mairas/UltimateLatexMakefile/">Ultimate Latex Makefile</a> - GNU Makefile
+ * <a href="http://xpt.sourceforge.net/tools/latexmake/">LatexMake</a> - GNU Makefile
+ * <a href="http://docs.miktex.org/manual/texifying.html">texify</a> - part of MiKTeX
+ * <a href="http://www.cmake.org/Wiki/CMakeUserUseLATEX">UseLATEX.cmake</a> - CMake
+ * <a href="http://majewsky.wordpress.com/category/geek-stuff/programming/lamake/">LaMake</a> - C and Qt based
