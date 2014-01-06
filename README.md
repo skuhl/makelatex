@@ -34,17 +34,15 @@ Example usage
 
 The following shows a very simple example of how makelatex works (see <a href="https://github.com/skuhl/makelatex/tree/master/testdocs">testdocs</a> directory for more examples!):
 
-<pre><code>
-testdocs/imagebib$ makelatex 
-uconvert: subdir/angle-of-decl.pdf (5KiB) <-- subdir/angle-of-decl.svg (20KiB) using inkscape
-             example: xelatex
-             example: bibtex8
-example: Warning--empty author and editor in chicago
-             example: xelatex
-             example: xelatex
-example: Overfull \hbox (215.2359pt too wide) in paragraph at lines 11--14
-             example:  1 pg;   76KiB; letter paper; PDFv1.5
-</code></pre>
+	testdocs/imagebib$ makelatex 
+	uconvert: subdir/angle-of-decl.pdf (5KiB) <-- subdir/angle-of-decl.svg (20KiB) using inkscape
+				 example: xelatex
+				 example: bibtex8
+	example: Warning--empty author and editor in chicago
+				 example: xelatex
+				 example: xelatex
+	example: Overfull \hbox (215.2359pt too wide) in paragraph at lines 11--14
+				 example:  1 pg;   76KiB; letter paper; PDFv1.5
 
 
 Similar programs
