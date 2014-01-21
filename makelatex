@@ -587,7 +587,7 @@ class makelatex:
                             help='Keep makelatex-tmp folder containing logs and converted images')
         parser.add_argument('-c', '--clean', action="store_true",
                             help='Just cleanup, don\'t build tex files')
-        # %% is needed before !TEX for help information to be displayed...
+        # In the "help" variable below, "%%" is needed before !TEX for help information to be displayed...
         parser.add_argument('-e', '--engine',
                             help="latex (uses dvips and ps2pdf), pdflatex, xelatex, or lualatex. You can also set this with the MAKELATEX_ENGINE environment variable or with a '%%!TEX program=enginename' in the first line of your latex file.")
         # Default to synctex ON
