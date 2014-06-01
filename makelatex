@@ -707,7 +707,7 @@ class makelatex:
         else:
             texs = []
             for i in self.args.texfiles:
-                if i.endswith(".tex"): # we want .tex endings
+                if i.endswith(".tex") and os.path.exists(i): # we want .tex endings
                     texs.append(i)
                 # if we got .pdf ending and .tex file exists with same name, change argument:
                 elif i.endswith(".pdf") and os.path.exists(i[:-4]+".tex"):
