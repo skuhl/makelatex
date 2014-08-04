@@ -1045,8 +1045,8 @@ class makelatex:
         # Collect information in log files to use
         pdfinfo =  self.MLTMP + "pdfinfo-" +makelatexUtil.bname(path)+".log"
         pdffonts = self.MLTMP + "pdffonts-"+makelatexUtil.bname(path)+".log"
-        self.runCommand("pdfinfo",  "\""+path+"\" > \"" + pdfinfo  + "\" 2>/dev/null", shell=True)
-        self.runCommand("pdffonts", "\""+path+"\" > \"" + pdffonts + "\" 2>/dev/null", shell=True)
+        self.runCommand("pdfinfo",  makelatexUtil.fileOnly(path) + "\" > \"" + pdfinfo  + "\" 2>/dev/null", shell=True)
+        self.runCommand("pdffonts", makelatexUtil.fileOnly(path) + "\" > \"" + pdffonts + "\" 2>/dev/null", shell=True)
 
         # Print # of pages and paper size
         numPages = '?'
