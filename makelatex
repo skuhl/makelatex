@@ -1042,9 +1042,11 @@ class makelatex:
         if not makelatexUtil.findFileInPaths("pdfinfo") or not makelatexUtil.findFileInPaths("pdffonts"):
             return None
 
-        # Collect information from pdfinfo and pdffonts, store information in log files that we'll use later.
+        # Collect information from pdfinfo and pdffonts, store
+        # information in log files that we'll use later.
         pdfinfo =  self.MLTMP + "pdfinfo-" +makelatexUtil.bname(path)+".log"
         pdffonts = self.MLTMP + "pdffonts-"+makelatexUtil.bname(path)+".log"
+        # Using fileOnly() on the path fixes a problem with running makelatex in cygwin
         self.runCommand("pdfinfo",  "\"" + makelatexUtil.fileOnly(path) + "\" > \"" + pdfinfo  + "\" 2>/dev/null", shell=True)
         self.runCommand("pdffonts", "\"" + makelatexUtil.fileOnly(path) + "\" > \"" + pdffonts + "\" 2>/dev/null", shell=True)
 
@@ -1357,10 +1359,12 @@ class makelatex:
         """Runs bibtex if needed. Returns True or False depending on if we
         had to run bibtex. Calls exit() when there is an error."""
 
+        # This message is put in the log file if we need to run bibtex:
         bibtexargs = self.findMatches( [ "^No file (.*)\.bbl" ], self.MLTMP+basename+".log")
         if len(bibtexargs) == 0:
             return False
 
+        # Check if bibtex8 or bibtex is available somewhere in our path.
         exe = makelatexUtil.findFileInPaths("bibtex8")
         if not exe:
             exe = "bibtex"
@@ -1369,14 +1373,18 @@ class makelatex:
             return False
 
         for basename in bibtexargs:
-            if not self.args.quiet: print(self.outfmt % (basename, makelatexUtil.bname(exe)))
+            if not self.args.quiet:
+                print(self.outfmt % (basename, makelatexUtil.bname(exe)))
+
+            # Run bibtex, look for errors problems.
             # bibtex8 returns 0 for OK run, 1 for warnings, 2 for errors
             # bibtex returns 0 for OK run/warnings, 2 for errors
             if self.runCommand(exe, basename + "> bibtex-" + basename+".log", shell=True, wd=self.MLTMP) > 1:
+                # If bibtex doesn't run, print bibtex log file and exit:
                 print(open(self.MLTMP+"bibtex-"+basename+".log").read())
                 exit(1)
 
-            else:
+            else:  # If we ran bibtex successfully:
                 for line in open(self.MLTMP+"bibtex-"+basename+".log"):
                     if line.startswith("Warning--") or line.startswith("Repeated entry---"):
                         print(makelatexUtil.getWarnColorCode() + basename+": "+ makelatexUtil.getResetColorCode() + line.strip())
