@@ -2014,10 +2014,6 @@ class makelatex:
 
         self.runPrePost("pre")
 
-        files = self.getTexFiles()
-        self.findNonAsciiChars(files)
-        self.makeSuggestions(files)
-
         # Update the time we started in a global variable---used to set mtime
         # of PDFs we create.
         self.makelatex_start_time = time.time()
@@ -2063,6 +2059,9 @@ class makelatex:
             # Create pdfs from each tex file
             for i in texfilelist:
                 triedToBuild.append(i)
+
+            self.findNonAsciiChars(texfilelist)
+            self.makeSuggestions(texfilelist)
 
             self.callFunctionWithThreads(self.processTexFile, texfilelist)
 
