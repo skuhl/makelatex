@@ -6,7 +6,7 @@ makelatex simplifies the process of generating PDFs from LaTeX documents on Linu
 makelatex has a large collection of useful features:
 
 * *Simple installation:* Copy the makelatex script into /usr/bin or put it in the directory with your LaTeX code and make it executable.
-* *Focus on PDFs:* makelatex assumes that you don't want to create anything but a PDF. It can use "engines" such as xelatex, lualatex, pdflatex or latex+dvips+ps2pdf to create them. By default, makelatex uses whatever program it can find as an engine. A specific engine be selected with the <i>-e</i> option, by setting the MAKELATEX_ENGINE environment variable, or by specifying it on the first line of a tex file using "% !TEX = engine".
+* *Focus on PDFs:* makelatex assumes that you don't want to create anything but a PDF. It can use "engines" such as xelatex, lualatex, pdflatex or latex+dvips+ps2pdf to create them. By default, makelatex uses whatever program it can find as an engine. A specific engine can be selected with the <i>-e</i> option, by setting the MAKELATEX_ENGINE environment variable, or by specifying it on the first line of a tex file using "% !TEX = engine".
 * *Automatic image conversion:* Converts images from popular formats into the formats expected by the version of LaTeX that you are using. The rules for converting images is stored in the makelatex script and can be easily modified. Conversion can be disabled with <i>--noconvert</i>
 * *Google Drive (or Google Docs) support:* See testdocs/google-drive for an example of how to have makelatex download LaTeX code from Google Drive and compile it into a PDF on your own computer.
 * *Reruns latex as necessary* to resolve any undefined citations or changing labels.

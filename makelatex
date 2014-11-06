@@ -2009,7 +2009,7 @@ class makelatex:
                 pass
 
     def processTexFiles(self):
-        """Determines which tex files the that we should create PDFs for and
+        """Determines which tex files that we should create PDFs for and
         creates them."""
 
         self.runPrePost("pre")
@@ -2039,7 +2039,7 @@ class makelatex:
 
             # Prune the texfile list to just the files that need updating AND
             # the files that we haven't already tried to build in a previous
-            # time through the loop.  This is needed because if we failed to
+            # time through the loop. This is needed because if we failed to
             # build a file, we would repeatedly try to build it inside of the
             # above loop.  If force flag is set, isUpdateNeeded() will always
             # return true.
@@ -2054,9 +2054,9 @@ class makelatex:
                 break
 
             # If the same image is in multiple tex files, we only want to
-            # convert the image once.  Therefore, convert the images here
+            # convert the image once. Therefore, convert the images here
             # instead of doing it in the loop below which uses seperate threads
-            # per document.  (NOTE: uconvert uses one thread per image if
+            # per document. (NOTE: uconvert uses one thread per image if
             # multiple images are being converted).
             self.convertImages(texfilelist)
 
