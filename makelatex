@@ -617,7 +617,7 @@ class makelatex:
         parser.add_argument('--nonascii', action="store_true",
                             help="Warn about non-ASCII characters in tex files.")
         parser.add_argument('--quiet', '-q', action="store_true",
-                            help="Turns on --nonascii. Also hides other output except for warnings/errors and PDF statistics.")
+                            help="Hides all output except warnings/errors and PDF statistics.")
         parser.add_argument('--diff', nargs=2, metavar=('old.tex', 'new.tex'),
                             help="Generates a PDF showing differences between two versions of a document (requires latexdiff command).")
 
@@ -1975,7 +1975,7 @@ class makelatex:
     def findNonAsciiChars(self, files):
         """Given a list of files, print out lines which contain non-ASCII
         characters"""
-        if self.args.nonascii == False or self.args.quiet:
+        if self.args.nonascii == False:
             return
 
         # Find sty and bib files that the tex files use:
