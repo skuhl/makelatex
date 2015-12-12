@@ -1,7 +1,7 @@
 makelatex
 =========
 
-makelatex simplifies the process of generating PDFs from LaTeX documents on Linux. The latest release is available for download at  https://github.com/skuhl/makelatex/releases and install information is available in INSTALL.txt
+makelatex simplifies the process of generating PDFs from LaTeX documents on Linux and OSX. The latest release is available for download at  https://github.com/skuhl/makelatex/releases and install information is available in INSTALL.txt
 
 makelatex has a large collection of useful features:
 
