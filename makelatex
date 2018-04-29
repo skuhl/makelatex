@@ -196,7 +196,7 @@ class uconvert:
 
         # Ensure that the source file exists.
         if not os.path.exists(filein):
-            self.printError("uconvert: ERROR: You called runcommand() with an nonexistant input file")
+            makelatexUtil.printError("uconvert: ERROR: You called runcommand() with an nonexistant input file")
             return False # fail
 
         fileinstat  = os.stat(filein)
@@ -220,7 +220,6 @@ class uconvert:
         if not makelatexUtil.findFileInPaths(command.split(" ")[0]):
             print("uconvert: Skipping rule because \"" + ruleName + "\" is not available; trying other rules...")
             return False
-
 
         # Run the command in the directory of the source file
         command = "cd " + os.path.dirname(indir+"/"+base) + " && " + command
@@ -246,11 +245,11 @@ class uconvert:
                 return True  # success
 
             else:  # program ran properly, but the output file wasn't created
-                self.printError("uconvert: ERROR " + fileout + ": Running command didn't create file! Command: " + command)
+                makelatexUtil.printError("uconvert: ERROR " + fileout + ": Running command didn't create file! Command: " + command)
                 sys.stdout.flush()
                 return False # fail
         else:
-            self.printError("uconvert: ERROR: " + fileout + ": Command failed: " + command)
+            makelatexUtil.printError("uconvert: ERROR: " + fileout + ": Command failed: " + command)
             sys.stdout.flush()
             return False  # program failed
 
